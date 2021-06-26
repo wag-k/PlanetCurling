@@ -70,15 +70,19 @@ class Planet {
   }
 }
 
-// とりあえず初手として2体問題を考える
-function calcGravity(mainPlanet, subPlanet){
-  var deltaX = subPlanet.pos.x - mainPlanet.pos.x;
-  var deltaY = subPlanet.pos.y - mainPlanet.pos.y;
-  var distance = Math.sqrt(Math.pow(deltaX,2.0) + Math.pow(deltaY,2.0));
+// 多体の重力を計算
+function calcGravity(mainPlanet, subPlanets = new Array<Planet>[]){
+  var acceleration = new Acceleration(0.0, 0.0); // 成分に分けてreturn
+  subPlanets.forEach(subPlanet => {
+    var deltaX = subPlanet.pos.x - mainPlanet.pos.x;
+    var deltaY = subPlanet.pos.y - mainPlanet.pos.y;
+    var distance = Math.sqrt(Math.pow(deltaX,2.0) + Math.pow(deltaY,2.0));
 
-  const constantOfGravitation = 6.67430 * Math.pow(10.0, -11.0);
-  var gravity = constantOfGravitation * mainPlanet.mass * subPlanet.mass / Math.pow(distance, 2.0); // 万有引力
-  var acceleration = new Acceleration(gravity*deltaX/distance, gravity*deltaY/distance); // 成分に分けてreturn
+    const constantOfGravitation = 6.67430 * Math.pow(10.0, -11.0);
+    var gravity = constantOfGravitation * mainPlanet.mass * subPlanet.mass / Math.pow(distance, 2.0); // 万有引力
+    acceleration.x += gravity*deltaX/distance;
+    acceleration.y += gravity*deltaY/distance; // 成分に分けてreturn
+  });
   return acceleration;
 }
 
@@ -86,7 +90,7 @@ function calcGravity(mainPlanet, subPlanet){
 function meterToPx(meter){
   const AstroUnit = 149597870700.0; // 天文単位
   // 10AUを画面の端（短辺）として考えてみる。 
-  return Math.floor(meter/10/AstroUnit*Math.min(g.game.width, g.game.height));
+  return Math.floor(meter/1000/AstroUnit*Math.min(g.game.width, g.game.height));
 }
 
 function main(param) {
@@ -107,8 +111,9 @@ function main(param) {
     // 惑星を配置
     const AstroUnit = 149597870700.0; // 天文単位
     const deltaTime = 60*60*24*30.0; // 1frame約１か月
-    var planet1 = new Planet(40000.0, 6*Math.pow(10.0,11), new Pos(4.0*AstroUnit, 3.0*AstroUnit), new Velocity(0,0), new Acceleration(0,0));
-    var planet2 = new Planet(40000.0, 6*Math.pow(10.0,11), new Pos(4.1*AstroUnit, 2.99*AstroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
+    var planet1 = new Planet(40000.0, 6*Math.pow(10.0,14), new Pos(400.0*AstroUnit, 400*AstroUnit), new Velocity(0,0), new Acceleration(0,0));
+    var planet2 = new Planet(40000.0, 6*Math.pow(10.0,14), new Pos(500.0*AstroUnit, 600*AstroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
+    var planet3 = new Planet(40000.0, 6*Math.pow(10.0,17), new Pos(600.0*AstroUnit, 500*AstroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
 
     // プレイヤーを生成します
     /*
@@ -139,16 +144,30 @@ function main(param) {
       y: Math.floor(meterToPx(planet2.pos.y)),
     });
   
+    var planet3Size = Math.max(meterToPx(planet3.radius), 5);
+    var player3 = new g.FilledRect({
+      scene: scene,
+      cssColor: "green",
+      width: planet3Size*2,
+      height: planet3Size*2,
+      x: Math.floor(meterToPx(planet3.pos.x)),
+      y: Math.floor(meterToPx(planet3.pos.y)),
+    });
+
     scene.onUpdate.add(function () {
-      var acceleration1 = calcGravity(planet1, planet2);
-      var acceleration2 = calcGravity(planet2, planet1);
+      var acceleration1 = calcGravity(planet1, [planet2,planet3]);
+      var acceleration2 = calcGravity(planet2, [planet1,planet3]);
+      var acceleration3 = calcGravity(planet3, [planet1,planet2]);
       planet1.updatePos(deltaTime, acceleration1);
       planet2.updatePos(deltaTime, acceleration2);
+      planet3.updatePos(deltaTime, acceleration3);
 
       player1.x = meterToPx(planet1.pos.x);
       player1.y = meterToPx(planet1.pos.y);
       player2.x = meterToPx(planet2.pos.x);
       player2.y = meterToPx(planet2.pos.y);
+      player3.x = meterToPx(planet3.pos.x);
+      player3.y = meterToPx(planet3.pos.y);
 
       scene.modified();
     });
@@ -180,6 +199,7 @@ function main(param) {
     */
     scene.append(player1);
     scene.append(player2);
+    scene.append(player3);
     // ここまでゲーム内容を記述します
   });
   g.game.pushScene(scene);
