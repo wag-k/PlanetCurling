@@ -4,18 +4,6 @@
 	"fps": 30,
 	"main": "./script/main.js",
 	"assets": {
-		"player": {
-			"type": "image",
-			"width": 32,
-			"height": 32,
-			"path": "image/player.png"
-		},
-		"shot": {
-			"type": "image",
-			"width": 16,
-			"height": 16,
-			"path": "image/shot.png"
-		},
 		"se": {
 			"type": "audio",
 			"path": "audio/se",
@@ -31,6 +19,24 @@
 			"type": "script",
 			"path": "script/planet.js",
 			"global": true
+		},
+		"planet1": {
+			"type": "image",
+			"width": 164,
+			"height": 165,
+			"path": "image/planet1.PNG"
+		},
+		"planet2": {
+			"type": "image",
+			"width": 165,
+			"height": 171,
+			"path": "image/planet2.PNG"
+		},
+		"sun": {
+			"type": "image",
+			"width": 195,
+			"height": 196,
+			"path": "image/sun.PNG"
 		}
 	},
 	"moduleMainScripts": {},
