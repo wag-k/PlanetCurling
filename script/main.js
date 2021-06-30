@@ -82,19 +82,51 @@ class Planet {
   }
 }
 
+/**
+ * Universeの動作State
+ * 惑星軌道シミュレーション中
+ */
 class MotionSimulationState {
   constructor(universe){
     this.universe = universe;
   }
+
+  stateChanged(){
+
+  }
+
   update(){
     const deltaTime = Setting.TimeStepSec;
     this.universe.planets.forEach((planet, idx) => {
       var acceleration = calcGravity(this.universe.planets, idx);
+      acceleration.x = acceleration.x/planet.mass;
+      acceleration.y = acceleration.y/planet.mass;
       planet.updatePos(deltaTime, acceleration);
       planet.entity.x = meterToPx(planet.pos.x);
       planet.entity.y = meterToPx(planet.pos.y);
       planet.entity.modified();
     });
+  }
+}
+
+/**
+ * Universeの動作State
+ * 惑星の速度をスワイプで決定する
+ */
+class DirectionSelectState {
+  constructor(universe){
+    this.universe = universe;
+    this.startPos = new Pos(0, 0); // 
+    this.endPos = new Pos(0, 0);
+  }
+  
+  stateChanged(){
+    this.startPos = this.planet1.pos.clone();
+
+  }
+
+  update(){
+    const deltaTime = Setting.TimeStepSec;
   }
 }
 
@@ -114,12 +146,18 @@ class Universe {
       this.scene.append(planet.entity);
     });
     this.motionSimulationState = new MotionSimulationState(this);
-    this.state = this.motionSimulationState;
+    this._state = this.motionSimulationState; // 外からはstateのSetterで変更してもらう。
   }
   
   addPlanet(planet){
     this.planets.push(planet);
     this.scene.append(planet.entity);
+  }
+
+  get state() {return this._state;}
+  set state(state) {
+    this._state = state;
+    this.state.stateChanged();
   }
 
   update(){
@@ -165,9 +203,12 @@ function calcGravity(planets=new Array<Planet>[], mainPlanetIdx=0){
 function meterToPx(meter){
   const astroUnit = PhysicalConstant.AstroUnit; // 天文単位
   // 10AUを画面の端（短辺）として考えてみる。 
-  return Math.floor(meter/1000/astroUnit*Math.min(g.game.width, g.game.height));
+  return Math.floor(meter/10/astroUnit*Math.min(g.game.width, g.game.height));
 }
 
+function pxToMeter(px){
+  return px/meterToPx(1);
+}
 
 function main(param) {
 
@@ -186,9 +227,10 @@ function main(param) {
     */
     // 惑星を配置
     const astroUnit = PhysicalConstant.AstroUnit;
-    var planet1 = new Planet(40000.0, 6*Math.pow(10.0,14), new Pos(400.0*astroUnit, 400*astroUnit), new Velocity(0,0), new Acceleration(0,0));
-    var planet2 = new Planet(40000.0, 6*Math.pow(10.0,14), new Pos(500.0*astroUnit, 600*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
-    var planet3 = new Planet(40000.0, 6*Math.pow(10.0,18), new Pos(600.0*astroUnit, 500*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
+    const deltaTime = Setting.TimeStepSec;
+    var planet1 = new Planet(40000.0, 6*Math.pow(10.0, 20.0), new Pos(4.0*astroUnit, 4*astroUnit), new Velocity(0,0.003*astroUnit/deltaTime), new Acceleration(0,0));
+    var planet2 = new Planet(40000.0, 6*Math.pow(10.0,20), new Pos(7.0*astroUnit, 6.0*astroUnit), new Velocity(0.0,-0.003*astroUnit/deltaTime), new Acceleration(0.0,0.0));
+    var planet3 = new Planet(40000.0, 6*Math.pow(10.0,26), new Pos(6.0*astroUnit, 5*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
 
     // プレイヤーを生成します
     var planet1ImageAsset = scene.asset.getImageById("planet1");
@@ -202,6 +244,7 @@ function main(param) {
       scaleY: 0.2,
       x: Math.floor(meterToPx(planet1.pos.x)),
       y: Math.floor(meterToPx(planet1.pos.y)),
+      touchable: true,
     });
     planet1.entity = player1;
 
@@ -227,7 +270,7 @@ function main(param) {
     });
     planet3.entity = player3;
 
-    var universe = new Universe(scene, [planet1, planet2, planet3], 100*astroUnit, 100*astroUnit); // 宇宙創造
+    var universe = new Universe(scene, [planet1, planet2, planet3], 10*astroUnit, 10*astroUnit); // 宇宙創造
 
 
     scene.onUpdate.add(function () {
@@ -236,6 +279,14 @@ function main(param) {
     });
     
     player1.onUpdate.add(function () {
+    });
+
+    player1.onPointDown.add(function() {
+
+    });
+
+    player1.onPointUp.add(function() {
+      universe.state = universe.motionSimulationState;
     });
 
     /*
