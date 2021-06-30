@@ -82,6 +82,22 @@ class Planet {
   }
 }
 
+class MotionSimulationState {
+  constructor(universe){
+    this.universe = universe;
+  }
+  update(){
+    const deltaTime = Setting.TimeStepSec;
+    this.universe.planets.forEach((planet, idx) => {
+      var acceleration = calcGravity(this.universe.planets, idx);
+      planet.updatePos(deltaTime, acceleration);
+      planet.entity.x = meterToPx(planet.pos.x);
+      planet.entity.y = meterToPx(planet.pos.y);
+      planet.entity.modified();
+    });
+  }
+}
+
 class Universe {
   /**
    * 
@@ -97,6 +113,8 @@ class Universe {
     this.planets.forEach(planet => {
       this.scene.append(planet.entity);
     });
+    this.motionSimulationState = new MotionSimulationState(this);
+    this.state = this.motionSimulationState;
   }
   
   addPlanet(planet){
@@ -105,14 +123,7 @@ class Universe {
   }
 
   update(){
-    const deltaTime = Setting.TimeStepSec;
-    this.planets.forEach((planet, idx) => {
-      var acceleration = calcGravity(this.planets, idx);
-      planet.updatePos(deltaTime, acceleration);
-      planet.entity.x = meterToPx(planet.pos.x);
-      planet.entity.y = meterToPx(planet.pos.y);
-      planet.entity.modified();
-    });
+    this.state.update();
   }
 }
 
@@ -177,7 +188,7 @@ function main(param) {
     const astroUnit = PhysicalConstant.AstroUnit;
     var planet1 = new Planet(40000.0, 6*Math.pow(10.0,14), new Pos(400.0*astroUnit, 400*astroUnit), new Velocity(0,0), new Acceleration(0,0));
     var planet2 = new Planet(40000.0, 6*Math.pow(10.0,14), new Pos(500.0*astroUnit, 600*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
-    var planet3 = new Planet(40000.0, 6*Math.pow(10.0,17), new Pos(600.0*astroUnit, 500*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
+    var planet3 = new Planet(40000.0, 6*Math.pow(10.0,18), new Pos(600.0*astroUnit, 500*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
 
     // プレイヤーを生成します
     var planet1ImageAsset = scene.asset.getImageById("planet1");
