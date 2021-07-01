@@ -107,6 +107,9 @@ class MotionSimulationState {
       planet.entity.modified();
     });
   }
+  playerDrag(ev){
+    
+  }
 }
 
 /**
@@ -121,12 +124,18 @@ class DirectionSelectState {
   }
   
   stateChanged(){
-    this.startPos = this.planet1.pos.clone();
-
   }
 
   update(){
+  }
+
+  playerDrag(ev){
     const deltaTime = Setting.TimeStepSec;
+    var deltaX = ev.startDelta.x;
+    var deltaY = ev.startDelta.y;
+    var velocityPerPx = - this.universe.worldWidthMeter/deltaTime/g.game.width/100;
+    this.universe.planets[0].velocity.x = velocityPerPx*deltaX;
+    this.universe.planets[0].velocity.y = velocityPerPx*deltaY;
   }
 }
 
@@ -146,7 +155,8 @@ class Universe {
       this.scene.append(planet.entity);
     });
     this.motionSimulationState = new MotionSimulationState(this);
-    this._state = this.motionSimulationState; // 外からはstateのSetterで変更してもらう。
+    this.directionSelectState = new DirectionSelectState(this);
+    this._state = this.directionSelectState; // 外からはstateのSetterで変更してもらう。
   }
   
   addPlanet(planet){
@@ -162,6 +172,10 @@ class Universe {
 
   update(){
     this.state.update();
+  }
+  
+  playerDrag(ev){
+    this.state.playerDrag(ev);
   }
 }
 
@@ -228,7 +242,7 @@ function main(param) {
     // 惑星を配置
     const astroUnit = PhysicalConstant.AstroUnit;
     const deltaTime = Setting.TimeStepSec;
-    var planet1 = new Planet(40000.0, 6*Math.pow(10.0, 20.0), new Pos(4.0*astroUnit, 4*astroUnit), new Velocity(0,0.003*astroUnit/deltaTime), new Acceleration(0,0));
+    var planet1 = new Planet(40000.0, 6*Math.pow(10.0, 20.0), new Pos(4.0*astroUnit, 4*astroUnit), new Velocity(0,0.0), new Acceleration(0,0));
     var planet2 = new Planet(40000.0, 6*Math.pow(10.0,20), new Pos(7.0*astroUnit, 6.0*astroUnit), new Velocity(0.0,-0.003*astroUnit/deltaTime), new Acceleration(0.0,0.0));
     var planet3 = new Planet(40000.0, 6*Math.pow(10.0,26), new Pos(6.0*astroUnit, 5*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
 
@@ -273,18 +287,23 @@ function main(param) {
     var universe = new Universe(scene, [planet1, planet2, planet3], 10*astroUnit, 10*astroUnit); // 宇宙創造
 
 
+    // 毎フレームごとの処理
     scene.onUpdate.add(function () {
       universe.update();
       scene.modified();
     });
-    
-    player1.onUpdate.add(function () {
-    });
 
+    // プレイヤーにタッチしたら方向選択モード
     player1.onPointDown.add(function() {
-
+      universe.state = universe.directionSelectState;
     });
 
+    // ドラッグ量に応じて速度を決める
+    player1.onPointMove.add(function(ev) {
+      universe.playerDrag(ev);
+    });
+
+    // マウスを離したらシミュレーション開始
     player1.onPointUp.add(function() {
       universe.state = universe.motionSimulationState;
     });
