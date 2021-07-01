@@ -14,11 +14,20 @@ class Setting{
 }
 
 // 本当は別ファイルにしたい、けど別ファイルを読み込む方法がよくわからない。
+/**
+ * 位置クラス
+ * 単位はMeterを想定しているけど、Pxも可。プログラム中で分かるようにしておくこと
+ */
 class Pos{
   constructor(x, y) {
       this.x = x;
       this.y = y;
   }
+/**
+ * オイラー法的に位置を更新
+ * @param {*} deltaTime 
+ * @param {*} velocity 
+ */
   update(deltaTime, velocity) {
     this.x += velocity.x * deltaTime;
     this.y += velocity.y * deltaTime;
@@ -29,12 +38,20 @@ class Pos{
   }
 }
 
+/**
+ * 速度クラス
+ */
 class Velocity{
   constructor(x, y, acceleration) {
       this.x = x;
       this.y = y;
   }
 
+/**
+ * オイラー法的に速度を更新
+ * @param {*} deltaTime 
+ * @param {*} acceleration 
+ */
   update(deltaTime, acceleration) {
     this.x += acceleration.x * deltaTime;
     this.y += acceleration.y * deltaTime;
@@ -44,6 +61,9 @@ class Velocity{
   }
 }
 
+/**
+ * 加速度クラス。
+ */
 class Acceleration{
   constructor(x, y) {
     this.x = x;
@@ -58,6 +78,10 @@ class Acceleration{
   }
 }
 
+/**
+ * 惑星クラス
+ * 長さの単位はMeter
+ */
 class Planet {
   constructor(radius, mass, initPos = new Pos(0,0), initVelocity = new Velocity(0,0), initAcceleration = new Acceleration(0,0)) {
     this.radius = radius;
@@ -70,6 +94,11 @@ class Planet {
   set entity(entity){this._entity = entity;}
   get entity(){return this._entity;}
 
+/**
+ * 加速度、速度、位置を更新。オイラー法ではなくて、運動量でやったほうが精度よくなるらしい。
+ * @param {*} deltaTime 
+ * @param {*} acceleration 
+ */
   updatePos(deltaTime, acceleration) {
     this.acceleration.update(acceleration);
     this.velocity.update(deltaTime, this.acceleration);
@@ -255,6 +284,8 @@ function main(param) {
     var planet1ImageAsset = scene.asset.getImageById("planet1");
     var planet2ImageAsset = scene.asset.getImageById("planet2");
     var planet3ImageAsset = scene.asset.getImageById("sun");
+
+    // 惑星１（主人公）
     var planet1Size = Math.max(meterToPx(planet1.radius), 5);
     var player1 = new g.Sprite({
       scene: scene,
@@ -267,6 +298,7 @@ function main(param) {
     });
     planet1.entity = player1;
 
+    // 惑星２
     var planet2Size = Math.max(meterToPx(planet2.radius), 5);
     var player2 = new g.Sprite({
       scene: scene,
@@ -278,6 +310,7 @@ function main(param) {
     });
     planet2.entity = player2;
   
+    // 太陽
     var planet3Size = Math.max(meterToPx(planet3.radius), 5);
     var player3 = new g.Sprite({
       scene: scene,
