@@ -231,6 +231,11 @@ function main(param) {
     // このシーンで利用するアセットのIDを列挙し、シーンに通知します
     assetIds: ["planet1", "planet2", "sun"]
   });
+  var font = new g.DynamicFont({
+    game: g.game,
+    fontFamily: "sans-serif",
+    size: 48
+  });
   scene.onLoad.add(function () {
     // ここからゲーム内容を記述します
     // 各アセットオブジェクトを取得します
@@ -285,7 +290,16 @@ function main(param) {
     planet3.entity = player3;
 
     var universe = new Universe(scene, [planet1, planet2, planet3], 10*astroUnit, 10*astroUnit); // 宇宙創造
-
+  
+    var directionLabel = new g.Label({
+      scene: scene, // g.Sceneの値
+      font: font, // g.Fontの値
+      text: "プレイヤーをタッチして速度をつけよう",
+      fontSize: 20,
+      x: 10,
+      y: 10
+    });
+    scene.append(directionLabel);
 
     // 毎フレームごとの処理
     scene.onUpdate.add(function () {
@@ -295,17 +309,23 @@ function main(param) {
 
     // プレイヤーにタッチしたら方向選択モード
     player1.onPointDown.add(function() {
+      directionLabel.text = "スワイプして方向を決めよう";
+      directionLabel.invalidate();
       universe.state = universe.directionSelectState;
     });
 
     // ドラッグ量に応じて速度を決める
     player1.onPointMove.add(function(ev) {
+      directionLabel.text = "スワイプして方向を決めよう";
+      directionLabel.invalidate();
       universe.playerDrag(ev);
     });
 
     // マウスを離したらシミュレーション開始
     player1.onPointUp.add(function() {
       universe.state = universe.motionSimulationState;
+      directionLabel.text = "プレイヤーをタッチして速度をつけよう";
+      directionLabel.invalidate();
     });
 
     /*
