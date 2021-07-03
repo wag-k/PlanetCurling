@@ -13,6 +13,14 @@ class Setting{
   static get TimeStepSec(){return 60*60*24*30.0*1;} // 1frame約1か月 
 }
 
+/**
+ * 座標軸のenum
+ */
+var Coordinate =  {
+  "Orthogonal": 0,
+  "Polar": 1, 
+};
+
 // 本当は別ファイルにしたい、けど別ファイルを読み込む方法がよくわからない。
 /**
  * 位置クラス
@@ -77,6 +85,35 @@ class Acceleration{
     return new Acceleration(this.x, this.y);
   }
 }
+
+/**
+ * 極座標クラス
+ */
+class Polar{
+  constructor(radius, angular){
+    this.radius = radius; // meter
+    this.angular = angular; // rad
+  }
+
+  static orthogonalToPolar(center = new Pos(0, 0), pos = new Pos(0, 0)) {
+    var deltaX = pos.x - center.x;
+    var deltaY = pos.y - center.y;
+    var radius = Math.sqrt(Math.pow(deltaX,2.0) + Math.pow(deltaY,2.0));
+    var angular = 0;
+    if (deltaX != 0){
+      angular = Math.atan2(deltaY, deltaX);
+    }
+    return new Polar(radius, angular);
+  }
+
+  toOrthogonal(center = new Pos(0 ,0)){
+    var x = center.x + this.radius*Math.cos(this.angular);
+    var y = center.y + this.radius*Math.sin(this.angular);
+    return new Pos(x, y);
+  }
+}
+
+
 
 /**
  * 惑星クラス
