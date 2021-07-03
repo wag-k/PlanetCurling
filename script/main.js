@@ -162,7 +162,7 @@ class DirectionSelectState {
     const deltaTime = Setting.TimeStepSec;
     var deltaX = ev.startDelta.x;
     var deltaY = ev.startDelta.y;
-    var velocityPerPx = - this.universe.worldWidthMeter/deltaTime/g.game.width/100;
+    var velocityPerPx = - this.universe.worldWidthMeter/deltaTime/g.game.width/100; // 適当な数で割っておかないと、速度が早くなりすぎる。
     this.universe.planets[0].velocity.x = velocityPerPx*deltaX;
     this.universe.planets[0].velocity.y = velocityPerPx*deltaY;
   }
@@ -258,21 +258,16 @@ function main(param) {
   var scene = new g.Scene({
     game: g.game,
     // このシーンで利用するアセットのIDを列挙し、シーンに通知します
-    assetIds: ["planet1", "planet2", "sun"]
+    assetIds: ["planet1", "planet2", "sun", "gravity_vector", "velocity_vector"]
   });
   var font = new g.DynamicFont({
     game: g.game,
     fontFamily: "sans-serif",
     size: 48
   });
+
   scene.onLoad.add(function () {
     // ここからゲーム内容を記述します
-    // 各アセットオブジェクトを取得します
-    /*
-    var playerImageAsset = scene.asset.getImageById("player");
-    var shotImageAsset = scene.asset.getImageById("shot");
-    var seAudioAsset = scene.asset.getAudioById("se");
-    */
     // 惑星を配置
     const astroUnit = PhysicalConstant.AstroUnit;
     const deltaTime = Setting.TimeStepSec;
@@ -280,11 +275,12 @@ function main(param) {
     var planet2 = new Planet(40000.0, 6*Math.pow(10.0,20), new Pos(7.0*astroUnit, 6.0*astroUnit), new Velocity(0.0,-0.003*astroUnit/deltaTime), new Acceleration(0.0,0.0));
     var planet3 = new Planet(40000.0, 6*Math.pow(10.0,26), new Pos(6.0*astroUnit, 5*astroUnit), new Velocity(0.0,0.0), new Acceleration(0.0,0.0));
 
-    // プレイヤーを生成します
+    // 各アセットオブジェクトを取得します
     var planet1ImageAsset = scene.asset.getImageById("planet1");
     var planet2ImageAsset = scene.asset.getImageById("planet2");
     var planet3ImageAsset = scene.asset.getImageById("sun");
 
+    // プレイヤーを生成します
     // 惑星１（主人公）
     var planet1Size = Math.max(meterToPx(planet1.radius), 5);
     var player1 = new g.Sprite({
@@ -389,6 +385,7 @@ function main(param) {
     */
     // ここまでゲーム内容を記述します
   });
+
   g.game.pushScene(scene);
 }
 module.exports = main;

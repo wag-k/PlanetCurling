@@ -37,6 +37,18 @@
 			"width": 195,
 			"height": 196,
 			"path": "image/sun.PNG"
+		},
+		"gravity_vector": {
+			"type": "image",
+			"width": 200,
+			"height": 200,
+			"path": "image/gravity_vector.png"
+		},
+		"velocity_vector": {
+			"type": "image",
+			"width": 200,
+			"height": 200,
+			"path": "image/velocity_vector.png"
 		}
 	},
 	"moduleMainScripts": {},
