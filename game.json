@@ -15,10 +15,11 @@
 			"path": "script/main.js",
 			"global": true
 		},
-		"planet": {
-			"type": "script",
-			"path": "script/planet.js",
-			"global": true
+		"gravity_vector": {
+			"type": "image",
+			"width": 200,
+			"height": 200,
+			"path": "image/gravity_vector.png"
 		},
 		"planet1": {
 			"type": "image",
@@ -37,12 +38,6 @@
 			"width": 195,
 			"height": 196,
 			"path": "image/sun.PNG"
-		},
-		"gravity_vector": {
-			"type": "image",
-			"width": 200,
-			"height": 200,
-			"path": "image/gravity_vector.png"
 		},
 		"velocity_vector": {
 			"type": "image",

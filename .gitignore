@@ -1,5 +1,3 @@
 node_modules
-audio/se.aac
-audio/se.ogg
-image/player.png
-image/shot.png
+/script
+coverage
