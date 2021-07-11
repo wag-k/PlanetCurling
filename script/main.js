@@ -101,6 +101,13 @@ var Acceleration = /** @class */ (function () {
     };
     return Acceleration;
 }());
+function squareSumRoot(array) {
+    var sumSquare = 0;
+    array.forEach(function (element) {
+        sumSquare += Math.pow(element, 2);
+    });
+    return Math.sqrt(sumSquare);
+}
 /**
  * 極座標クラス
  */
@@ -141,17 +148,40 @@ var Polar = /** @class */ (function () {
  * 長さの単位はMeter
  */
 var Planet = /** @class */ (function () {
-    function Planet(radius, mass, initPos, initVelocity, initAcceleration) {
+    function Planet(universe, radius, mass, initPos, initVelocity, initAcceleration) {
+        if (universe === void 0) { universe = new Universe(new g.Scene({ game: g.game })); }
         if (radius === void 0) { radius = 0; }
         if (mass === void 0) { mass = 0; }
         if (initPos === void 0) { initPos = new Pos(0, 0); }
         if (initVelocity === void 0) { initVelocity = new Velocity(0, 0); }
         if (initAcceleration === void 0) { initAcceleration = new Acceleration(0, 0); }
+        this.universe = universe;
         this.radius = radius;
         this.mass = mass;
-        this.pos = initPos; // 型の制約どうやってつけるの？
+        this.pos = initPos;
         this.velocity = initVelocity;
         this.acceleration = initAcceleration;
+        // 矢印エンティティ作成
+        var gravityVectorImageAsset = universe.scene.asset.getImageById("gravity_vector");
+        var velocityVectorImageAsset = universe.scene.asset.getImageById("velocity_vector");
+        this.gravityVector = new g.Sprite({
+            scene: this.universe.scene,
+            src: gravityVectorImageAsset,
+            scaleX: 0.2,
+            scaleY: 0.2,
+            x: Math.floor(0),
+            y: Math.floor(100),
+        });
+        this.velocityVector = new g.Sprite({
+            scene: this.universe.scene,
+            src: velocityVectorImageAsset,
+            scaleX: 0.2,
+            scaleY: 0.2,
+            x: Math.floor(100),
+            y: Math.floor(100),
+        });
+        this.universe.scene.append(this.gravityVector);
+        this.universe.scene.append(this.velocityVector);
     }
     /**
      * 加速度、速度、位置を更新。オイラー法ではなくて、運動量でやったほうが精度よくなるらしい。
@@ -163,8 +193,12 @@ var Planet = /** @class */ (function () {
         this.velocity.update(deltaTime, this.acceleration);
         this.pos.update(deltaTime, this.velocity);
     };
+    Planet.prototype.updateVector = function () {
+        this.velocityVector.modified();
+        this.gravityVector.modified();
+    };
     Planet.prototype.clone = function () {
-        var cloned = new Planet(this.radius, this.mass, this.pos.clone(), this.velocity.clone(), this.acceleration.clone());
+        var cloned = new Planet(this.universe, this.radius, this.mass, this.pos.clone(), this.velocity.clone(), this.acceleration.clone());
         // entityもcloneしたい
         return cloned;
     };
@@ -206,27 +240,6 @@ var DirectionSelectState = /** @class */ (function () {
         this.universe = universe;
         this.startPos = new Pos(0, 0); // 
         this.endPos = new Pos(0, 0);
-        // 矢印エンティティ作成
-        var gravityVectorImageAsset = universe.scene.asset.getImageById("gravity_vector");
-        var velocityVectorImageAsset = universe.scene.asset.getImageById("velocity_vector");
-        this.gravityVector = new g.Sprite({
-            scene: this.universe.scene,
-            src: gravityVectorImageAsset,
-            scaleX: 0.2,
-            scaleY: 1.0,
-            x: Math.floor(0),
-            y: Math.floor(0),
-        });
-        this.velocityVector = new g.Sprite({
-            scene: this.universe.scene,
-            src: velocityVectorImageAsset,
-            scaleX: 0.2,
-            scaleY: 0.0,
-            x: Math.floor(0),
-            y: Math.floor(0),
-        });
-        this.universe.scene.append(this.gravityVector);
-        this.universe.scene.append(this.velocityVector);
     }
     DirectionSelectState.prototype.stateChanged = function () {
         var _this = this;
@@ -238,20 +251,27 @@ var DirectionSelectState = /** @class */ (function () {
                 var gravityStrength = Math.sqrt(Math.pow(gravity.x, 2.0) + Math.pow(gravity.y, 2.0));
                 gravityStrength = gravityStrength;
                 var sizeVector = meterToPx(gravityStrength / Math.pow(10, 4));
-                _this.gravityVector.height = sizeVector;
-                _this.gravityVector.modified();
+                planet.gravityVector.height = sizeVector;
+                planet.gravityVector.invalidate();
             }
         });
     };
     DirectionSelectState.prototype.update = function () {
+        this.universe.planets.forEach(function (planet, idx) {
+            planet.updateVector();
+        });
     };
     DirectionSelectState.prototype.playerDrag = function (ev) {
         var deltaTime = Setting.TimeStepSec;
         var deltaX = ev.startDelta.x;
         var deltaY = ev.startDelta.y;
+        var distance = squareSumRoot([deltaX, deltaY]);
         var velocityPerPx = -this.universe.worldWidthMeter / deltaTime / g.game.width / 100; // 適当な数で割っておかないと、速度が早くなりすぎる。
         this.universe.planets[0].velocity.x = velocityPerPx * deltaX;
         this.universe.planets[0].velocity.y = velocityPerPx * deltaY;
+        var sizeVector = Math.floor(Math.abs(velocityPerPx) * distance * 1);
+        this.universe.planets[0].velocityVector.height = sizeVector;
+        this.universe.planets[0].velocityVector.invalidate();
     };
     return DirectionSelectState;
 }());
@@ -340,20 +360,21 @@ function main(param) {
         size: 48
     });
     scene.onLoad.add(function () {
-        // ここからゲーム内容を記述します
-        // 惑星を配置
         var astroUnit = PhysicalConstant.AstroUnit;
         var deltaTime = Setting.TimeStepSec;
-        var planet1 = new Planet(40000.0, 6 * Math.pow(10.0, 20.0), new Pos(4.0 * astroUnit, 4 * astroUnit), new Velocity(0, 0.0), new Acceleration(0, 0));
-        var planet2 = new Planet(40000.0, 6 * Math.pow(10.0, 20), new Pos(7.0 * astroUnit, 6.0 * astroUnit), new Velocity(0.0, -0.003 * astroUnit / deltaTime), new Acceleration(0.0, 0.0));
-        var planet3 = new Planet(40000.0, 6 * Math.pow(10.0, 26), new Pos(6.0 * astroUnit, 5 * astroUnit), new Velocity(0.0, 0.0), new Acceleration(0.0, 0.0));
+        // ここからゲーム内容を記述します
+        var universe = new Universe(scene, new Array(), 10 * astroUnit, 10 * astroUnit); // 宇宙創造
+        // 惑星を生成
+        var planet1 = new Planet(universe, 40000.0, 6 * Math.pow(10.0, 20.0), new Pos(4.0 * astroUnit, 4 * astroUnit), new Velocity(0, 0.0), new Acceleration(0, 0));
+        var planet2 = new Planet(universe, 40000.0, 6 * Math.pow(10.0, 20), new Pos(7.0 * astroUnit, 6.0 * astroUnit), new Velocity(0.0, -0.003 * astroUnit / deltaTime), new Acceleration(0.0, 0.0));
+        var planet3 = new Planet(universe, 40000.0, 6 * Math.pow(10.0, 26), new Pos(6.0 * astroUnit, 5 * astroUnit), new Velocity(0.0, 0.0), new Acceleration(0.0, 0.0));
         // 各アセットオブジェクトを取得します
         var planet1ImageAsset = scene.asset.getImageById("planet1");
         var planet2ImageAsset = scene.asset.getImageById("planet2");
         var planet3ImageAsset = scene.asset.getImageById("sun");
         // プレイヤーを生成します
         // 惑星１（主人公）
-        var planet1Size = Math.max(meterToPx(planet1.radius), 5);
+        var planet1Size = Math.max(meterToPx(planet1.radius), 10);
         var player1 = new g.Sprite({
             scene: scene,
             src: planet1ImageAsset,
@@ -365,7 +386,7 @@ function main(param) {
         });
         planet1.entity = player1;
         // 惑星２
-        var planet2Size = Math.max(meterToPx(planet2.radius), 5);
+        var planet2Size = Math.max(meterToPx(planet2.radius), 10);
         var player2 = new g.Sprite({
             scene: scene,
             src: planet2ImageAsset,
@@ -376,7 +397,7 @@ function main(param) {
         });
         planet2.entity = player2;
         // 太陽
-        var planet3Size = Math.max(meterToPx(planet3.radius), 5);
+        var planet3Size = Math.max(meterToPx(planet3.radius), 20);
         var player3 = new g.Sprite({
             scene: scene,
             src: planet3ImageAsset,
@@ -386,7 +407,10 @@ function main(param) {
             y: Math.floor(meterToPx(planet3.pos.y)),
         });
         planet3.entity = player3;
-        var universe = new Universe(scene, [planet1, planet2, planet3], 10 * astroUnit, 10 * astroUnit); // 宇宙創造
+        // 宇宙に惑星を追加して配置。
+        universe.addPlanet(planet1);
+        universe.addPlanet(planet2);
+        universe.addPlanet(planet3);
         var directionLabel = new g.Label({
             scene: scene,
             font: font,
