@@ -44,6 +44,36 @@
 			"width": 200,
 			"height": 200,
 			"path": "image/velocity_vector.png"
+		},
+		"motion": {
+			"type": "script",
+			"path": "script/motion.js",
+			"global": true
+		},
+		"physical_constant": {
+			"type": "script",
+			"path": "script/physical_constant.js",
+			"global": true
+		},
+		"planet": {
+			"type": "script",
+			"path": "script/planet.js",
+			"global": true
+		},
+		"setting": {
+			"type": "script",
+			"path": "script/setting.js",
+			"global": true
+		},
+		"universe": {
+			"type": "script",
+			"path": "script/universe.js",
+			"global": true
+		},
+		"universe_state": {
+			"type": "script",
+			"path": "script/universe_state.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},
