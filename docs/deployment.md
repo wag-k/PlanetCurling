@@ -40,15 +40,15 @@ buildまたはtestが失敗した場合、exportとdeployは実行されませ�
 
 ## 初回のGitHub Pages設定
 
-リポジトリ管理者がGitHub上で次を確認してください。
+初回のWorkflow実行より前に、リポジトリ管理者がGitHub Pagesを有効化してください。未設定のまま実行すると、`Configure GitHub Pages` stepがPagesサイトを取得できず、`Not Found`で失敗します。
 
 1. リポジトリの **Settings** を開く。
 2. **Pages** を開く。
-3. **Build and deployment** の **Source** で **GitHub Actions** を選ぶ（選択欄が表示される場合）。
+3. **Build and deployment** の **Source** で **GitHub Actions** を選ぶ。
 4. **Actions** タブで **Deploy GitHub Pages** を開き、`workflow_dispatch`の **Run workflow** から初回deployを実行するか、`master`へ変更をmergeする。
 5. 成功したdeploy jobに表示されるURLから公開ページを確認する。
 
-追加のSecretやPersonal Access Tokenは不要です。WorkflowはGitHubが発行するOIDCトークンとPages権限を使用します。
+WorkflowからPagesを自動的に有効化する`configure-pages`の`enablement`オプションは使用しません。このオプションには通常の`GITHUB_TOKEN`以外の管理権限付きトークンが必要になるためです。追加のSecretやPersonal Access Tokenは不要で、deployにはGitHubが発行するOIDCトークンとPages権限を使用します。
 
 ## Pull Requestの品質ゲート
 
