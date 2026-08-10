@@ -1,0 +1,66 @@
+name: Deploy GitHub Pages
+
+# 本番Pagesの更新はmasterへのpush、または明示的な手動実行に限定する。
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 新しいmasterを優先し、古い未完了の公開が後から反映されることを防ぐ。
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, test, and export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # 検証に成功したmasterだけを、リポジトリ内の一時成果物へexportする。
+      - name: Export HTML
+        run: npm run export-html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      # export-htmlが生成したgame/をPages専用artifactとしてアップロードする。
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: game
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

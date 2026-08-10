@@ -41,10 +41,10 @@ image/, audio/             既存アセット
 
 ## セットアップと実行
 
-Node.jsを用意し、リポジトリ直下で次を実行します。
+Node.js 24を用意し、リポジトリ直下で次を実行します。CIも同じメジャーバージョンを使用します。
 
 ```sh
-npm install
+npm ci
 npm run build
 npm start
 ```
@@ -57,6 +57,54 @@ Akashic Sandboxが表示するURLをブラウザで開いて動作を確認し�
 npm test
 npm run lint
 ```
+
+## 開発フロー
+
+変更はfeature branchから`master`向けPull Requestを作成します。Pull Requestではbuildとtestだけを行い、GitHub Pagesへは公開しません。merge後の`master`で再度buildとtestを行い、成功した場合だけHTMLをexportして公開します。
+
+```text
+feature branch
+↓
+Pull Request
+↓
+CI build
+↓
+CI test
+↓
+master merge
+↓
+build
+↓
+test
+↓
+HTML export
+↓
+GitHub Pages deploy
+```
+
+## ローカルでの公開前確認
+
+GitHub Actionsと同じ順序で確認します。
+
+```sh
+npm ci
+npm run build
+npm test
+npm run export-html
+```
+
+`npm run export-html`はリポジトリ内の`game/`へ、`index.html`、JavaScript、アセットなどの静的ファイルを生成します。`game/`は一時成果物でありGit管理しません。ローカルでは`game/index.html`をブラウザで開いて確認できます。ブラウザの制約で直接開けない場合は、任意のローカルHTTPサーバーから`game/`を配信してください。
+
+## GitHub Pages
+
+- `master`へのpushで **Deploy GitHub Pages** ワークフローが起動し、自動更新します。
+- Pull Requestの時点では公開しません。
+- buildまたはtestに失敗した成果物は公開しません。
+- deployに失敗した場合は、GitHubの **Actions** タブで失敗したstepを確認します。
+- **Deploy GitHub Pages** の `workflow_dispatch`（**Run workflow**）から手動deployを再実行できます。
+- 旧`PlanetCurlingExe`リポジトリへのexport、コピー、pushは行いません。
+
+GitHub Pagesの初回有効化と、CI成功をmerge条件にするRulesetの設定は[CI/CD・GitHub Pages設定](docs/deployment.md)を参照してください。
 
 ## 物理シミュレーション設定
 
