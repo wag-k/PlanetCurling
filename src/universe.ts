@@ -1,72 +1,74 @@
-import * as phy_const from "./physical_constant"
-import {Pos, Velocity, Acceleration, Polar, meterToPx, squareSumRoot} from "./motion";
-import {Planet} from "./planet";
+import {PlanetRenderer} from "./rendering";
+import {SimulationRunner} from "./simulation_runner";
 import * as State from "./universe_state";
 
+/**
+ * 入力状態・固定刻みシミュレーション・描画同期を接続するアプリケーション層です。
+ * 物理計算そのものはSimulationRunner以下へ委譲します。
+ */
 export class Universe {
-  scene:g.Scene;
-  planets:Array<Planet>;
-  worldWidthMeter:number;
-  worldHeightMeter:number;
-  motionSimulationState:State.MotionSimulationState;
-  directionSelectState:State.DirectionSelectState;
-  private _state:State.IUniverseState;
-  /**
-   * 
-   * @param {Array<Planet>} planets 
-   * @param {int} width 
-   * @param {int} height 
-   */
-  constructor(scene:g.Scene, planets = new Array<Planet>(), worldWidthMeter=0, worldHeightMeter=0){
-    this.scene = scene;
-    this.planets = planets;
-    this.worldWidthMeter = worldWidthMeter;
-    this.worldHeightMeter = worldHeightMeter;
-    this.planets.forEach(planet => {
-      this.scene.append(planet.entity);
-    });
+	/** 固定刻みの物理シミュレーション実行器です。 */
+	readonly simulationRunner: SimulationRunner;
 
-    this.motionSimulationState = new State.MotionSimulationState(this);
-    this.directionSelectState = new State.DirectionSelectState(this);
-    
-    this.state = this.directionSelectState; // 外からはstateのSetterで変更してもらう。
+	/** 全物理サブステップ後にだけ呼び出す描画同期先です。 */
+	readonly renderer: PlanetRenderer;
 
-  }
-  
-  addPlanet(planet:Planet){
-    this.planets.push(planet);
-    this.scene.append(planet.entity);
-  }
+	/** 入力速度の換算に使用する物理世界の幅（m）です。 */
+	readonly worldWidthMeters: number;
 
-  get state() {return this._state;}
-  set state(state) {
-    this._state = state;
-    this.state.stateChanged();
-  }
+	/** 入力速度の換算に使用する画面幅（px）です。 */
+	readonly viewportWidthPixels: number;
 
-  update(){
-    this.state.update();
-  }
-  
-  playerDrag(ev:g.PointMoveEvent){
-    this.state.playerDrag(ev);
-  }
-}
+	/** 惑星運動を進める状態です。 */
+	readonly motionSimulationState: State.MotionSimulationState;
 
-// 多体の重力を計算
-export function calcGravity(planets=new Array<Planet>(), mainPlanetIdx=0){
-  var acceleration = new Acceleration(0.0, 0.0); // 成分に分けてreturn
-  var mainPlanet = planets[mainPlanetIdx];
-  planets.forEach((subPlanet, planetIdx) => {
-    if(planetIdx == mainPlanetIdx){return;}
-    var deltaX = subPlanet.pos.x - mainPlanet.pos.x;
-    var deltaY = subPlanet.pos.y - mainPlanet.pos.y;
-    var distance = Math.sqrt(Math.pow(deltaX,2.0) + Math.pow(deltaY,2.0));
+	/** プレイヤーが初速度を選択する状態です。 */
+	readonly directionSelectState: State.DirectionSelectState;
 
-    const constantOfGravitation = phy_const.PhysicalConstant.ConstantOfGravitation;
-    var gravity = constantOfGravitation * mainPlanet.mass * subPlanet.mass / Math.pow(distance, 2.0); // 万有引力
-    acceleration.x += gravity*deltaX/distance;
-    acceleration.y += gravity*deltaY/distance; // 成分に分けてreturn
-  });
-  return acceleration;
+	/** 現在の入力・更新状態です。 */
+	private currentState: State.IUniverseState;
+
+	/**
+	 * アプリケーション層を生成します。
+	 * @param simulationRunner 固定刻みシミュレーション実行器
+	 * @param renderer Akashic描画同期先
+	 * @param worldWidthMeters 入力換算に使う物理世界幅（m）
+	 * @param viewportWidthPixels 入力換算に使う画面幅（px）
+	 */
+	constructor(
+		simulationRunner: SimulationRunner,
+		renderer: PlanetRenderer,
+		worldWidthMeters: number,
+		viewportWidthPixels: number
+	) {
+		this.simulationRunner = simulationRunner;
+		this.renderer = renderer;
+		this.worldWidthMeters = worldWidthMeters;
+		this.viewportWidthPixels = viewportWidthPixels;
+		this.motionSimulationState = new State.MotionSimulationState(this);
+		this.directionSelectState = new State.DirectionSelectState(this);
+		this.currentState = this.directionSelectState;
+		this.currentState.stateChanged();
+	}
+
+	/** 現在の入力・更新状態を返します。 */
+	get state(): State.IUniverseState {
+		return this.currentState;
+	}
+
+	/** 状態を切り替え、切り替え先へ初期同期を通知します。 */
+	set state(state: State.IUniverseState) {
+		this.currentState = state;
+		this.currentState.stateChanged();
+	}
+
+	/** Akashicの1更新分の実時間を現在状態へ渡します。 */
+	update(realSeconds: number): void {
+		this.currentState.update(realSeconds);
+	}
+
+	/** 画面上の累積ドラッグ量を現在状態へ渡します。 */
+	playerDrag(dragXPixels: number, dragYPixels: number): void {
+		this.currentState.playerDrag(dragXPixels, dragYPixels);
+	}
 }

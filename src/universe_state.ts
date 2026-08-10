@@ -1,93 +1,94 @@
-import {Setting} from "./setting";
-import {Pos, Velocity, Acceleration, Polar, meterToPx, squareSumRoot} from "./motion";
-import {Universe, calcGravity} from "./universe";
+import {calculateAccelerations} from "./gravity";
+import {calculateLaunchVelocity} from "./input_velocity";
+import {Acceleration, Velocity} from "./motion";
 import {Planet} from "./planet";
+import {Setting} from "./setting";
+import {Universe} from "./universe";
 
-export interface IUniverseState{
-  stateChanged():void;
-  update():void;
-  playerDrag(ev:g.PointMoveEvent):void;
+/**
+ * Universeの入力モードとフレーム更新処理を差し替えるための状態契約です。
+ */
+export interface IUniverseState {
+	/** 状態へ遷移した直後の同期処理を行います。 */
+	stateChanged(): void;
+
+	/** Akashicの1フレーム分を処理します。 */
+	update(realSeconds: number): void;
+
+	/** 画面上の累積ドラッグ量を処理します。 */
+	playerDrag(dragXPixels: number, dragYPixels: number): void;
 }
 
 /**
- * Universeの動作State
- * 惑星軌道シミュレーション中
+ * 実時間をゲーム内時間へ換算して固定ステップを実行し、最後に描画を1回だけ同期する状態です。
  */
 export class MotionSimulationState implements IUniverseState {
-  universe:Universe
-  constructor(universe:Universe){
-    this.universe = universe;
-  }
+	/** 更新対象のアプリケーション層です。 */
+	private readonly universe: Universe;
 
-  stateChanged(){
+	/** 惑星運動状態を生成します。 */
+	constructor(universe: Universe) {
+		this.universe = universe;
+	}
 
-  }
+	/** 状態遷移時に必要な追加処理はありません。 */
+	stateChanged(): void {
+		// 固定ステップの端数時間はSimulationRunnerに保持されるため、遷移時にリセットしません。
+	}
 
-  update(){
-    const deltaTime = Setting.TimeStepSec;
-    this.universe.planets.forEach((planet, idx) => {
-      var acceleration = calcGravity(this.universe.planets, idx);
-      acceleration.x = acceleration.x/planet.mass;
-      acceleration.y = acceleration.y/planet.mass;
-      planet.updatePos(deltaTime, acceleration);
-      planet.entity.x = meterToPx(planet.pos.x);
-      planet.entity.y = meterToPx(planet.pos.y);
-      planet.entity.modified();
-    });
-  }
-  playerDrag(ev:g.PointMoveEvent){
-    
-  }
+	/** 必要数の物理サブステップを完了してから描画を1回だけ同期します。 */
+	update(realSeconds: number): void {
+		this.universe.simulationRunner.advance(realSeconds * Setting.SimulationSecondsPerSecond);
+		this.universe.renderer.update();
+	}
+
+	/** 運動中のドラッグは初速度へ反映しません。 */
+	playerDrag(_dragXPixels: number, _dragYPixels: number): void {
+		// 入力はDirectionSelectStateだけが扱います。
+	}
 }
 
 /**
- * Universeの動作State
- * 惑星の速度をスワイプで決定する
+ * 物理シミュレーションを進めず、ドラッグ量からプレイヤー天体の初速度を決める状態です。
  */
 export class DirectionSelectState implements IUniverseState {
-  universe:Universe;
-  startPos:Pos;
-  endPos:Pos;
-  constructor(universe:Universe){
-    this.universe = universe;
-    this.startPos = new Pos(0, 0); // 
-    this.endPos = new Pos(0, 0);
-    
-    
-  }
-  
-  stateChanged(){
-    const deltaTime = Setting.TimeStepSec;
-    this.universe.planets.forEach((planet, idx) => {
-      // そのうち全部回す
-      if ( idx == 0){
-        var gravity = calcGravity(this.universe.planets, idx);
-        let gravityStrength = Math.sqrt(Math.pow(gravity.x, 2.0) + Math.pow(gravity.y,2.0));
-        gravityStrength = gravityStrength;
-        let sizeVector = meterToPx(gravityStrength/Math.pow(10,4));
-        planet.gravityVector.height = sizeVector;
-        planet.gravityVector.invalidate();
-      }
-      
-    });
-  }
+	/** 更新対象のアプリケーション層です。 */
+	private readonly universe: Universe;
 
-  update(){
-    this.universe.planets.forEach((planet, idx) => {
-      planet.updateVector();
-    });
-  }
+	/** 方向選択状態を生成します。 */
+	constructor(universe: Universe) {
+		this.universe = universe;
+	}
 
-  playerDrag(ev:g.PointMoveEvent){
-    const deltaTime = Setting.TimeStepSec;
-    let deltaX = ev.startDelta.x;
-    let deltaY = ev.startDelta.y;
-    let distance = squareSumRoot([deltaX, deltaY]);
-    let velocityPerPx = - this.universe.worldWidthMeter/deltaTime/g.game.width/100; // 適当な数で割っておかないと、速度が早くなりすぎる。
-    this.universe.planets[0].velocity.x = velocityPerPx*deltaX;
-    this.universe.planets[0].velocity.y = velocityPerPx*deltaY;
-    let sizeVector = Math.floor(Math.abs(velocityPerPx)*distance*1);
-    this.universe.planets[0].velocityVector.height = sizeVector;
-    this.universe.planets[0].velocityVector.invalidate();
-  }
+	/** 現在位置の重力加速度を評価し、Viewへ最新状態を反映します。 */
+	stateChanged(): void {
+		const bodies: Planet[] = this.universe.simulationRunner.world.bodies;
+		const accelerations: Acceleration[] = calculateAccelerations(bodies);
+		bodies.forEach((body: Planet, index: number): void => {
+			body.acceleration.update(accelerations[index]);
+		});
+		this.universe.renderer.update();
+	}
+
+	/** 物理状態は進めず、現在のモデル状態を描画へ同期します。 */
+	update(_realSeconds: number): void {
+		this.universe.renderer.update();
+	}
+
+	/** 物理dtと独立した入力感度でプレイヤー天体の初速度を更新します。 */
+	playerDrag(dragXPixels: number, dragYPixels: number): void {
+		const player: Planet | undefined = this.universe.simulationRunner.world.bodies[0];
+		if (player === undefined) {
+			return;
+		}
+		const velocity: Velocity = calculateLaunchVelocity(
+			dragXPixels,
+			dragYPixels,
+			this.universe.worldWidthMeters,
+			this.universe.viewportWidthPixels
+		);
+		player.velocity.x = velocity.x;
+		player.velocity.y = velocity.y;
+		this.universe.renderer.update();
+	}
 }

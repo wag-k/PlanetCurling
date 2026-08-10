@@ -1,98 +1,85 @@
-# typescript-game-sample
+# PlanetCurling
 
-**typescript-game-sample**はTypeScriptでAkashicのゲームを作る際のサンプルプロジェクトです。
+PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。現在はゲームルールではなく、天体へドラッグで初速度を与え、多体重力による運動を表示する基礎部分を実装しています。
 
-## 利用方法
+## 現在できること
 
- `typescript-game-sample` を利用するにはNode.jsが必要です。
+- 3天体の重力シミュレーションと表示
+- プレイヤー天体のドラッグによる初速度設定
+- 6時間の固定物理タイムステップ
+- Symplectic Euler / Velocity Verletの切り替え
+- Akashic Engineに依存しない物理層の単体テスト
 
-初回のみ、以下のコマンドを実行して、ビルドに必要なパッケージをインストールしてください。
-この作業は `typescript-game-sample` を新しく生成するごとに必要です。
+ステージ、スコア、勝敗、衝突、軌道予測、軌跡、早送り・一時停止UI、AIなどのゲームルールはまだ実装していません。
+
+## 技術構成
+
+- TypeScript 3.9
+- Akashic Engine 3
+- Jest / ts-jest
+- ESLint
+
+物理モデル、重力計算、積分器、固定刻みランナーはAkashic Engineに依存しません。Akashic固有のSceneとSpriteは `src/main.ts` と `src/rendering.ts` に閉じ込め、1フレームに必要な物理サブステップをすべて終えた後で描画を1回同期します。
+
+## ディレクトリ概要
+
+```text
+src/
+  main.ts                 Akashic Sceneの構築とイベント接続
+  planet.ts               Akashic非依存の天体モデル
+  physics_world.ts        同時刻の天体群
+  gravity.ts              Newton重力による全加速度計算
+  physics_integrator.ts   2種類の積分器と切り替え
+  simulation_runner.ts    accumulator付き固定刻み実行器
+  rendering.ts            物理モデルからSpriteへの同期
+  input_velocity.ts       ドラッグ量から初速度への変換
+  universe*.ts            入力状態・時間進行・描画の調停
+spec/                     単体・数値回帰・起動テスト
+docs/                     設計文書
+image/, audio/             既存アセット
+```
+
+## セットアップと実行
+
+Node.jsを用意し、リポジトリ直下で次を実行します。
 
 ```sh
 npm install
-```
-
-### ビルド方法
-
-`typescript-game-sample` はTypeScriptで書かれているため、以下のコマンドでJavaScriptファイルに変換する必要があります。
-
-```sh
 npm run build
+npm start
 ```
 
-`src` ディレクトリ以下のTypeScriptファイルがコンパイルされ、`script` ディレクトリ以下にJavaScriptファイルが生成されます。
+Akashic Sandboxが表示するURLをブラウザで開いて動作を確認します。
 
-`npm run build` は自動的に `akashic scan asset script` を実行するので、`game.json` の更新が行われます。
-
-### 動作確認方法
-
-以下のどちらかを実行後、ブラウザで `http://localhost:3000/game/` にアクセスすることでゲームを実行できます。
-
-* `npm start`
-
-* `npm install -g @akashic/akashic-sandbox` 後、 `akashic-sandbox .`
-
-### テンプレートの使い方
-#### typescript
-* `src/main.ts` を編集することでゲームの作成が可能です。
-  * スプライトの表示、音を鳴らす、タッチイベント定義等が、最初からこのテンプレートで行われています。
-
-#### typescript-minimal
-* `src/main.ts` を編集することでゲームの作成が可能です。
-* 基本的な使い方は typescript テンプレートと同じですが、このテンプレートでは最低限のものしか記述されていないため以下のことは行われていません。
-  * スプライトの表示
-  * 音を鳴らす
-  * タッチイベント定義
-
-#### typescript-shin-ichiba-ranking
-* ゲーム部分を作成する場合は、 `src/main.ts` を編集してください。
-  * 基本的に`src/_bootstrap.ts`を編集する必要はありません。
-* 基本的な使い方は typescript テンプレートと同じですが、このテンプレートでは `src/main.ts` の `main` 関数の引数`param`に以下の値が新たに付与されています。
-  * `param.sessionParameter`: [セッションパラメーター](https://akashic-games.github.io/guide/ranking.html#session-parameters)
-  * `param.isAtsumaru`:コンテンツが動作している環境がゲームアツマール上かどうかを表すbool値
-* ランキングモードに対応したニコニコ新市場コンテンツの作り方の詳細については、[こちら](https://akashic-games.github.io/guide/ranking.html)を参照してください。
-
-### アセットの更新方法
-
-各種アセットを追加したい場合は、それぞれのアセットファイルを以下のディレクトリに格納します。
-
-* 画像アセット: `image`
-* スクリプトアセット: `script`
-* テキストアセット: `text`
-* オーディオアセット: `audio`
-
-これらのアセットを追加・変更したあとに `npm run update` をすると、アセットの変更内容をもとに `game.json` を書き換えることができます。
-
-### npm モジュールの追加・削除
-
-`typescript-game-sample` でnpmモジュールを利用する場合、このディレクトリで `akashic install <package_name>` することで npm モジュールを追加することができます。
-
-また `akashic uninstall <package_name>` すると npm モジュールを削除することができます。
-
-## エクスポート方法
-
-`typescript-game-sample` をエクスポートするときは以下のコマンドを利用します。
-
-### htmlファイルのエクスポート
-
-`npm run export-html` のコマンドを利用することで `game` ディレクトリにエクスポートすることができます。
-
-`game/index.html` をブラウザで開くと単体動作させることができます。
-
-### zipファイルのエクスポート
-
-`npm run export-zip` のコマンドを利用することで `game.zip` という名前のzipファイルを出力できます。
-
-## テスト方法
-
-1. [TSLint](https://github.com/palantir/tslint "TSLint")を使ったLint
-2. [Jasmine](http://jasmine.github.io "Jasmine")を使ったテスト
-
-がそれぞれ実行されます。
+## テストとlint
 
 ```sh
 npm test
+npm run lint
 ```
 
-テストコードのサンプルとして `spec/testSpec.js` を用意していますので参考にしてテストコードを記述して下さい。
+## 物理シミュレーション設定
+
+設定は `src/setting.ts` に集約しています。
+
+- `Setting.PhysicsStepSeconds`: 物理計算1回の時間。初期値は6時間（21,600秒）
+- `Setting.SimulationSecondsPerSecond`: 実時間1秒あたりに進めるゲーム内時間。初期値は900日相当
+- `Setting.IntegratorKind`: 使用する積分器
+- `Setting.InputVelocityReferenceSeconds`: ドラッグ速度換算の基準時間。物理dtとは独立
+
+積分器を変更するには `Setting.IntegratorKind` を次のいずれかへ変更します。
+
+```ts
+return PhysicsIntegratorKind.SymplecticEuler;
+return PhysicsIntegratorKind.VelocityVerlet;
+```
+
+詳細な数式、更新順序、時間設定、拡張ポイントは [物理シミュレーション設計](docs/physics-simulation.md) を参照してください。
+
+## 既知の制約
+
+- 天体同士が同一位置になった場合、Newton重力の特異点となるため計算を停止します。
+- 衝突判定と重力ソフトニングは未実装です。
+- 6時間dtは現在の初期条件向けの既定値で、すべての軌道の精度を保証しません。
+- シミュレーション速度が高いため、1画面更新で多数の固定ステップを実行します。
+- 速度・重力ベクトルの表示は既存の簡易表示で、物理量を厳密な縮尺で描いてはいません。

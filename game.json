@@ -74,6 +74,36 @@
 			"type": "script",
 			"path": "script/universe_state.js",
 			"global": true
+		},
+		"gravity": {
+			"type": "script",
+			"path": "script/gravity.js",
+			"global": true
+		},
+		"input_velocity": {
+			"type": "script",
+			"path": "script/input_velocity.js",
+			"global": true
+		},
+		"physics_integrator": {
+			"type": "script",
+			"path": "script/physics_integrator.js",
+			"global": true
+		},
+		"physics_world": {
+			"type": "script",
+			"path": "script/physics_world.js",
+			"global": true
+		},
+		"rendering": {
+			"type": "script",
+			"path": "script/rendering.js",
+			"global": true
+		},
+		"simulation_runner": {
+			"type": "script",
+			"path": "script/simulation_runner.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

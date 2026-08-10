@@ -1,71 +1,55 @@
-import {Pos, Velocity, Acceleration, Polar} from "./motion";
-import { Universe } from "./universe";
-
-/*
- * 惑星クラス
- * 長さの単位はMeter
- */
-export class Planet {
-  radius:number;
-  mass:number;
-  pos:Pos;
-  velocity:Velocity;
-  acceleration:Acceleration;
-  entity:g.Sprite;
-  universe:Universe;
-
-  gravityVector:g.Sprite; // 重力Vector
-  velocityVector:g.Sprite; // 重力Vector
-  constructor(universe = new Universe(new g.Scene({game:g.game})), radius=0, mass=0, initPos = new Pos(0,0), initVelocity = new Velocity(0,0), initAcceleration = new Acceleration(0,0)) {
-    this.universe = universe;
-    this.radius = radius;
-    this.mass = mass;
-    this.pos = initPos;
-    this.velocity = initVelocity;
-    this.acceleration = initAcceleration;
-    
-    // 矢印エンティティ作成
-    var gravityVectorImageAsset = universe.scene.asset.getImageById("gravity_vector");
-    var velocityVectorImageAsset = universe.scene.asset.getImageById("velocity_vector");
-    this.gravityVector = new g.Sprite({
-      scene: this.universe.scene,
-      src: gravityVectorImageAsset,
-      scaleX: 0.2,
-      scaleY: 0.2,
-      x: Math.floor(0),
-      y: Math.floor(100),
-    });
-    this.velocityVector = new g.Sprite({
-      scene: this.universe.scene,
-      src: velocityVectorImageAsset,
-      scaleX: 0.2,
-      scaleY: 0.2,
-      x: Math.floor(100),
-      y: Math.floor(100),
-    });
-    this.universe.scene.append(this.gravityVector);
-    this.universe.scene.append(this.velocityVector);
-  }
+import {Acceleration, Pos, Velocity} from "./motion";
 
 /**
- * 加速度、速度、位置を更新。オイラー法ではなくて、運動量でやったほうが精度よくなるらしい。
- * @param {*} deltaTime 
- * @param {*} acceleration 
+ * Akashic Engineに依存しない天体の物理状態です。
+ * すべての値をSI単位系で保持し、描画情報は持ちません。
  */
-  updatePos(deltaTime:number, acceleration:Acceleration):void {
-    this.acceleration.update(acceleration);
-    this.velocity.update(deltaTime, this.acceleration);
-    this.pos.update(deltaTime, this.velocity);
-  } 
+export class Planet {
+	/** 天体の半径（m）です。 */
+	radius: number;
 
-  updateVector():void {
-    this.velocityVector.modified();
-    this.gravityVector.modified();
-  }
+	/** 天体の質量（kg）です。 */
+	mass: number;
 
-  clone() {
-    var cloned = new Planet(this.universe, this.radius, this.mass, this.pos.clone(), this.velocity.clone(), this.acceleration.clone());
-    // entityもcloneしたい
-    return cloned;
-  }
+	/** 天体の位置（m）です。 */
+	pos: Pos;
+
+	/** 天体の速度（m/s）です。 */
+	velocity: Velocity;
+
+	/** 最後に評価した加速度（m/s^2）です。 */
+	acceleration: Acceleration;
+
+	/**
+	 * 天体の物理状態を生成します。
+	 * @param radius 半径（m）
+	 * @param mass 質量（kg）
+	 * @param initPos 初期位置（m）
+	 * @param initVelocity 初期速度（m/s）
+	 * @param initAcceleration 初期加速度（m/s^2）
+	 */
+	constructor(
+		radius: number = 0,
+		mass: number = 0,
+		initPos: Pos = new Pos(0, 0),
+		initVelocity: Velocity = new Velocity(0, 0),
+		initAcceleration: Acceleration = new Acceleration(0, 0)
+	) {
+		this.radius = radius;
+		this.mass = mass;
+		this.pos = initPos;
+		this.velocity = initVelocity;
+		this.acceleration = initAcceleration;
+	}
+
+	/** 物理状態だけを複製します。 */
+	clone(): Planet {
+		return new Planet(
+			this.radius,
+			this.mass,
+			this.pos.clone(),
+			this.velocity.clone(),
+			this.acceleration.clone()
+		);
+	}
 }
