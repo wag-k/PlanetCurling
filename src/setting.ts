@@ -9,6 +9,11 @@ export class Setting {
 		return 24 * 60 * 60;
 	}
 
+	/** ゲーム内1年の秒数です。G1では365日で固定します。 */
+	static get SecondsPerYear(): number {
+		return 365 * Setting.SecondsPerDay;
+	}
+
 	/** 物理計算1ステップの固定時間（6時間）です。 */
 	static get PhysicsStepSeconds(): number {
 		return 6 * 60 * 60;
@@ -17,6 +22,16 @@ export class Setting {
 	/** 実時間1秒で進めるゲーム内時間です。既存の30fps・1フレーム30日相当を維持します。 */
 	static get SimulationSecondsPerSecond(): number {
 		return 900 * Setting.SecondsPerDay;
+	}
+
+	/** 1投のリリース後に物理世界を進める固定ゲーム内時間（5年）です。 */
+	static get SimulationDurationPerShotSeconds(): number {
+		return 5 * Setting.SecondsPerYear;
+	}
+
+	/** RedとBlueがそれぞれ投げる回数です。 */
+	static get ShotsPerPlayer(): number {
+		return 3;
 	}
 
 	/** ドラッグ速度の換算にだけ使う従来互換の基準時間（30日）です。物理dtとは独立しています。 */

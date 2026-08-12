@@ -94,6 +94,13 @@ export class PlanetView {
 		);
 		this.velocityVector.modified();
 	}
+
+	/** New Game時に、この天体へ対応するSpriteをSceneから破棄します。 */
+	destroy(): void {
+		this.gravityVector.destroy();
+		this.velocityVector.destroy();
+		this.entity.destroy();
+	}
 }
 
 /**
@@ -126,6 +133,17 @@ export class PlanetRenderer {
 		);
 		this.views.push(view);
 		return view;
+	}
+
+	/** 指定した物理モデルへ対応する登録済みViewを返します。 */
+	findView(model: Planet): PlanetView | undefined {
+		return this.views.filter((view: PlanetView): boolean => view.model === model)[0];
+	}
+
+	/** New Game時に全Viewを破棄し、動的な盤面再構築を可能にします。 */
+	clear(): void {
+		this.views.forEach((view: PlanetView): void => view.destroy());
+		this.views.splice(0, this.views.length);
 	}
 
 	/** 全Viewを各物理モデルの最新状態へ同期します。 */

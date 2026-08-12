@@ -70,11 +70,6 @@
 			"path": "script/universe.js",
 			"global": true
 		},
-		"universe_state": {
-			"type": "script",
-			"path": "script/universe_state.js",
-			"global": true
-		},
 		"gravity": {
 			"type": "script",
 			"path": "script/gravity.js",
@@ -103,6 +98,16 @@
 		"simulation_runner": {
 			"type": "script",
 			"path": "script/simulation_runner.js",
+			"global": true
+		},
+		"game_balance": {
+			"type": "script",
+			"path": "script/game_balance.js",
+			"global": true
+		},
+		"match_controller": {
+			"type": "script",
+			"path": "script/match_controller.js",
 			"global": true
 		}
 	},

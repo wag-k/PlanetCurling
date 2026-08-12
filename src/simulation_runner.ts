@@ -55,6 +55,17 @@ export class SimulationRunner {
 		return this.completedStepCount;
 	}
 
+	/** ターン境界で固定dt未満の端数だけを破棄します。 */
+	clearRemainingSimulationSeconds(): void {
+		this.accumulatorSeconds = 0;
+	}
+
+	/** New Game時に端数時間と診断用ステップ数を初期化します。 */
+	reset(): void {
+		this.accumulatorSeconds = 0;
+		this.completedStepCount = 0;
+	}
+
 	/**
 	 * 指定したゲーム内時間をaccumulatorへ追加し、実行できた固定ステップ数を返します。
 	 * @param simulationSeconds 進めるゲーム内時間（s）

@@ -1,15 +1,14 @@
-import {Acceleration, Pos, Velocity} from "./motion";
-import {PhysicalConstant} from "./physical_constant";
+import {GameBalance} from "./game_balance";
+import {CurlingStone, MatchController, MatchState, Player} from "./match_controller";
 import {createPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
-import {Planet} from "./planet";
 import {PlanetRenderer, PlanetView} from "./rendering";
 import {Setting} from "./setting";
 import {SimulationRunner} from "./simulation_runner";
 import {Universe} from "./universe";
 
 /**
- * PlanetCurlingのAkashic Sceneを構築し、入力・シミュレーション・描画を接続します。
+ * PlanetCurlingのAkashic Sceneを構築し、2人対戦の入力・ターン進行・描画を接続します。
  */
 function main(_param: g.GameMainParameterObject): void {
 	const scene: g.Scene = new g.Scene({
@@ -19,77 +18,136 @@ function main(_param: g.GameMainParameterObject): void {
 	const font: g.DynamicFont = new g.DynamicFont({
 		game: g.game,
 		fontFamily: "sans-serif",
-		size: 48
+		size: 32
 	});
 
 	scene.onLoad.add((): void => {
-		const astronomicalUnit: number = PhysicalConstant.AstroUnit;
-		const worldSpanMeters: number = 10 * astronomicalUnit;
-		const playerPlanet: Planet = new Planet(
-			40000,
-			6 * Math.pow(10, 20),
-			new Pos(4 * astronomicalUnit, 4 * astronomicalUnit),
-			new Velocity(0, 0),
-			new Acceleration(0, 0)
-		);
-		const secondaryPlanet: Planet = new Planet(
-			40000,
-			6 * Math.pow(10, 20),
-			new Pos(7 * astronomicalUnit, 6 * astronomicalUnit),
-			new Velocity(0, -0.003 * astronomicalUnit / Setting.InitialVelocityReferenceSeconds),
-			new Acceleration(0, 0)
-		);
-		const sun: Planet = new Planet(
-			40000,
-			6 * Math.pow(10, 26),
-			new Pos(6 * astronomicalUnit, 5 * astronomicalUnit),
-			new Velocity(0, 0),
-			new Acceleration(0, 0)
-		);
-
-		const world: PhysicsWorld = new PhysicsWorld([playerPlanet, secondaryPlanet, sun]);
 		const runner: SimulationRunner = new SimulationRunner(
-			world,
+			new PhysicsWorld(),
 			createPhysicsIntegrator(Setting.IntegratorKind),
 			Setting.PhysicsStepSeconds
 		);
-		const renderer: PlanetRenderer = new PlanetRenderer(scene, worldSpanMeters);
-		const playerView: PlanetView = renderer.addPlanet(playerPlanet, "planet1", true);
-		renderer.addPlanet(secondaryPlanet, "planet2");
-		renderer.addPlanet(sun, "sun");
+		const matchController: MatchController = new MatchController(runner);
+		const renderer: PlanetRenderer = new PlanetRenderer(scene, GameBalance.WorldSpanMeters);
+		const universe: Universe = new Universe(
+			matchController,
+			renderer,
+			GameBalance.WorldSpanMeters,
+			g.game.width
+		);
 
-		const universe: Universe = new Universe(runner, renderer, worldSpanMeters, g.game.width);
-		const directionLabel: g.Label = new g.Label({
+		const turnLabel: g.Label = new g.Label({
 			scene: scene,
 			font: font,
-			text: "プレイヤーをタッチして速度をつけよう",
-			fontSize: 20,
+			text: "",
+			fontSize: 22,
 			x: 10,
 			y: 10
 		});
-		scene.append(directionLabel);
+		const stateLabel: g.Label = new g.Label({
+			scene: scene,
+			font: font,
+			text: "",
+			fontSize: 20,
+			x: 10,
+			y: 42
+		});
+		const newGameButton: g.FilledRect = new g.FilledRect({
+			scene: scene,
+			cssColor: "#303030",
+			x: g.game.width - 180,
+			y: 10,
+			width: 160,
+			height: 48,
+			touchable: true
+		});
+		const newGameLabel: g.Label = new g.Label({
+			scene: scene,
+			font: font,
+			text: "New Game",
+			fontSize: 20,
+			x: g.game.width - 155,
+			y: 22
+		});
+
+		/** 現在の試合状態を画面上のターン情報へ反映します。 */
+		function updateLabels(): void {
+			const playerText: string = matchController.currentPlayer === Player.Red ? "RED" : "BLUE";
+			turnLabel.text = matchController.state === MatchState.MatchFinished
+				? "Total: 6 / 6"
+				: "Turn: " + playerText
+					+ "  Shot: " + matchController.getCurrentPlayerShotNumber() + " / " + matchController.shotsPerPlayer
+					+ "  Total: " + matchController.getCurrentTotalShotNumber() + " / " + matchController.maximumTotalShots;
+			if (matchController.state === MatchState.Aiming) {
+				stateLabel.text = "Aim and release";
+			} else if (matchController.state === MatchState.Simulating) {
+				stateLabel.text = "Simulating...";
+			} else if (matchController.state === MatchState.TurnTransition) {
+				stateLabel.text = "Next turn...";
+			} else {
+				stateLabel.text = "Match Finished";
+			}
+			turnLabel.invalidate();
+			stateLabel.invalidate();
+		}
+
+		/** 指定した駒のViewへ、その駒がactiveStoneの場合だけ有効になる入力を接続します。 */
+		function bindStoneInput(stone: CurlingStone, view: PlanetView): void {
+			view.entity.onPointDown.add((): void => {
+				if (matchController.state === MatchState.Aiming && matchController.activeStone === stone) {
+					stateLabel.text = "Swipe to choose direction";
+					stateLabel.invalidate();
+				}
+			});
+			view.entity.onPointMove.add((event: g.PointMoveEvent): void => {
+				if (matchController.activeStone === stone) {
+					universe.playerDrag(event.startDelta.x, event.startDelta.y);
+				}
+			});
+			view.entity.onPointUp.add((): void => {
+				if (matchController.activeStone === stone && universe.releaseActiveStone()) {
+					updateLabels();
+				}
+			});
+		}
+
+		/** 物理世界へ動的追加された投球駒に、所有者別の既存画像Viewを追加します。 */
+		function synchronizeStoneViews(): void {
+			matchController.stones.forEach((stone: CurlingStone): void => {
+				if (renderer.findView(stone.body) !== undefined) {
+					return;
+				}
+				const imageAssetId: string = stone.owner === Player.Red ? "planet1" : "planet2";
+				bindStoneInput(stone, renderer.addPlanet(stone.body, imageAssetId, true));
+			});
+		}
+
+		/** New Game後の新しい物理モデルに合わせて全Viewを作り直します。 */
+		function rebuildPlanetViews(): void {
+			renderer.clear();
+			renderer.addPlanet(matchController.centralBody, "sun");
+			synchronizeStoneViews();
+			renderer.update();
+		}
+
+		newGameButton.onPointDown.add((): void => {
+			universe.newGame();
+			rebuildPlanetViews();
+			updateLabels();
+		});
+
+		rebuildPlanetViews();
+		scene.append(turnLabel);
+		scene.append(stateLabel);
+		scene.append(newGameButton);
+		scene.append(newGameLabel);
+		updateLabels();
 
 		scene.onUpdate.add((): void => {
 			universe.update(1 / g.game.fps);
+			synchronizeStoneViews();
+			updateLabels();
 			scene.modified();
-		});
-
-		playerView.entity.onPointDown.add((): void => {
-			directionLabel.text = "スワイプして方向を決めよう";
-			directionLabel.invalidate();
-			universe.state = universe.directionSelectState;
-		});
-
-		playerView.entity.onPointMove.add((event: g.PointMoveEvent): void => {
-			directionLabel.text = "スワイプして方向を決めよう";
-			directionLabel.invalidate();
-			universe.playerDrag(event.startDelta.x, event.startDelta.y);
-		});
-
-		playerView.entity.onPointUp.add((): void => {
-			universe.state = universe.motionSimulationState;
-			directionLabel.text = "プレイヤーをタッチして速度をつけよう";
-			directionLabel.invalidate();
 		});
 	});
 

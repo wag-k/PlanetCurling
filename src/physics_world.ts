@@ -16,4 +16,9 @@ export class PhysicsWorld {
 	addBody(body: Planet): void {
 		this.bodies.push(body);
 	}
+
+	/** New Game時に同じPhysicsWorldインスタンスからすべての天体を取り除きます。 */
+	clearBodies(): void {
+		this.bodies.splice(0, this.bodies.length);
+	}
 }

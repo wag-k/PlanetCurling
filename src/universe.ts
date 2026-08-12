@@ -1,14 +1,18 @@
+import {calculateAccelerations} from "./gravity";
+import {calculateLaunchVelocity} from "./input_velocity";
+import {MatchController, MatchState} from "./match_controller";
+import {Acceleration} from "./motion";
+import {Planet} from "./planet";
 import {PlanetRenderer} from "./rendering";
-import {SimulationRunner} from "./simulation_runner";
-import * as State from "./universe_state";
+import {Setting} from "./setting";
 
 /**
- * 入力状態・固定刻みシミュレーション・描画同期を接続するアプリケーション層です。
- * 物理計算そのものはSimulationRunner以下へ委譲します。
+ * Akashicの入力・更新周期をゲーム進行層と描画層へ接続するアプリケーション層です。
+ * ターン規則はMatchController、物理計算はSimulationRunnerへ委譲します。
  */
 export class Universe {
-	/** 固定刻みの物理シミュレーション実行器です。 */
-	readonly simulationRunner: SimulationRunner;
+	/** Akashic非依存の試合進行とactiveStoneの管理先です。 */
+	readonly matchController: MatchController;
 
 	/** 全物理サブステップ後にだけ呼び出す描画同期先です。 */
 	readonly renderer: PlanetRenderer;
@@ -19,56 +23,65 @@ export class Universe {
 	/** 入力速度の換算に使用する画面幅（px）です。 */
 	readonly viewportWidthPixels: number;
 
-	/** 惑星運動を進める状態です。 */
-	readonly motionSimulationState: State.MotionSimulationState;
-
-	/** プレイヤーが初速度を選択する状態です。 */
-	readonly directionSelectState: State.DirectionSelectState;
-
-	/** 現在の入力・更新状態です。 */
-	private currentState: State.IUniverseState;
-
-	/**
-	 * アプリケーション層を生成します。
-	 * @param simulationRunner 固定刻みシミュレーション実行器
-	 * @param renderer Akashic描画同期先
-	 * @param worldWidthMeters 入力換算に使う物理世界幅（m）
-	 * @param viewportWidthPixels 入力換算に使う画面幅（px）
-	 */
+	/** アプリケーション層を生成し、初期盤面の加速度をView用に評価します。 */
 	constructor(
-		simulationRunner: SimulationRunner,
+		matchController: MatchController,
 		renderer: PlanetRenderer,
 		worldWidthMeters: number,
 		viewportWidthPixels: number
 	) {
-		this.simulationRunner = simulationRunner;
+		this.matchController = matchController;
 		this.renderer = renderer;
 		this.worldWidthMeters = worldWidthMeters;
 		this.viewportWidthPixels = viewportWidthPixels;
-		this.motionSimulationState = new State.MotionSimulationState(this);
-		this.directionSelectState = new State.DirectionSelectState(this);
-		this.currentState = this.directionSelectState;
-		this.currentState.stateChanged();
+		this.refreshAccelerations();
 	}
 
-	/** 現在の入力・更新状態を返します。 */
-	get state(): State.IUniverseState {
-		return this.currentState;
-	}
-
-	/** 状態を切り替え、切り替え先へ初期同期を通知します。 */
-	set state(state: State.IUniverseState) {
-		this.currentState = state;
-		this.currentState.stateChanged();
-	}
-
-	/** Akashicの1更新分の実時間を現在状態へ渡します。 */
+	/**
+	 * Akashicの1更新分を処理します。
+	 * AimingとMatchFinishedでは時間を止め、Simulatingだけを6時間固定dtで進めます。
+	 */
 	update(realSeconds: number): void {
-		this.currentState.update(realSeconds);
+		if (this.matchController.state === MatchState.Simulating) {
+			this.matchController.advanceSimulation(realSeconds * Setting.SimulationSecondsPerSecond);
+		} else if (this.matchController.state === MatchState.TurnTransition) {
+			this.matchController.completeTurnTransition();
+			this.refreshAccelerations();
+		}
+		this.renderer.update();
 	}
 
-	/** 画面上の累積ドラッグ量を現在状態へ渡します。 */
-	playerDrag(dragXPixels: number, dragYPixels: number): void {
-		this.currentState.playerDrag(dragXPixels, dragYPixels);
+	/** 画面上の累積ドラッグ量を初速度へ変換し、現在のactiveStoneだけへ設定します。 */
+	playerDrag(dragXPixels: number, dragYPixels: number): boolean {
+		const updated: boolean = this.matchController.setActiveStoneVelocity(calculateLaunchVelocity(
+			dragXPixels,
+			dragYPixels,
+			this.worldWidthMeters,
+			this.viewportWidthPixels
+		));
+		if (updated) {
+			this.renderer.update();
+		}
+		return updated;
+	}
+
+	/** 現在のactiveStoneをリリースし、5年の物理進行を開始します。 */
+	releaseActiveStone(): boolean {
+		return this.matchController.releaseActiveStone();
+	}
+
+	/** 試合・物理世界を初期化し、Redの1投目へ戻します。 */
+	newGame(): void {
+		this.matchController.newGame();
+		this.refreshAccelerations();
+	}
+
+	/** 現在位置のNewton重力加速度を全Planetへ同期し、照準中の表示に利用します。 */
+	private refreshAccelerations(): void {
+		const bodies: Planet[] = this.matchController.simulationRunner.world.bodies;
+		const accelerations: Acceleration[] = calculateAccelerations(bodies);
+		bodies.forEach((body: Planet, index: number): void => {
+			body.acceleration.update(accelerations[index]);
+		});
 	}
 }
