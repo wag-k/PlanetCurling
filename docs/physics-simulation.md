@@ -104,7 +104,7 @@ static get IntegratorKind(): PhysicsIntegratorKind {
 
 ## ドラッグ速度の分離
 
-ドラッグ量から初速度への換算は `calculateLaunchVelocity()` が担当します。換算には `Setting.InputVelocityReferenceSeconds` と `Setting.DragVelocityDivisor` を使い、`PhysicsStepSeconds` は参照しません。したがって積分精度を30日から6時間へ変更しても操作感が直接変化しません。初期値は従来の30日基準・除数100を維持しています。
+ドラッグ量から初速度への換算は `calculateLaunchVelocity()` が担当します。換算には `Setting.InputVelocityReferenceSeconds` と `Setting.DragVelocityDivisor` を使い、最後に `Setting.LaunchVelocityMultiplier`（現在は1.5）を掛けます。`PhysicsStepSeconds` は参照しないため、物理dtを変更しても操作感が直接変化しません。
 
 ## 将来の拡張ポイント
 

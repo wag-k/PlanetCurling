@@ -1,5 +1,6 @@
 import {GameBalance} from "./game_balance";
 import {Acceleration, Pos, Velocity} from "./motion";
+import {OrbitScoreEvaluator} from "./orbit_score";
 import {Planet} from "./planet";
 import {Setting} from "./setting";
 import {SimulationRunner} from "./simulation_runner";
@@ -18,6 +19,13 @@ export enum MatchState {
 	MatchFinished = "MatchFinished"
 }
 
+/** 6投終了時の赤勝利・青勝利・引き分けを表します。 */
+export enum MatchResult {
+	RedWin = "RedWin",
+	BlueWin = "BlueWin",
+	Draw = "Draw"
+}
+
 /**
  * ゲーム上の投球駒と純粋な物理天体を関連付けます。
  * 所有者や投球番号をPlanetへ追加せず、物理層をゲームルールから分離します。
@@ -32,11 +40,24 @@ export class CurlingStone {
 	/** Newton重力と積分器が扱う純粋な物理天体です。 */
 	readonly body: Planet;
 
+	/** リリース済みならtrueになるゲーム進行上の状態です。 */
+	private released: boolean = false;
+
 	/** ゲーム上のメタデータと物理天体の関連を生成します。 */
 	constructor(owner: Player, shotNumber: number, body: Planet) {
 		this.owner = owner;
 		this.shotNumber = shotNumber;
 		this.body = body;
+	}
+
+	/** この駒が照準を終えてリリース済みかを返します。 */
+	get isReleased(): boolean {
+		return this.released;
+	}
+
+	/** この駒をリリース済みにします。 */
+	markReleased(): void {
+		this.released = true;
 	}
 }
 
@@ -50,6 +71,9 @@ export class MatchController {
 
 	/** 生成済みの投球駒です。過去の駒も重力源として保持します。 */
 	readonly stones: CurlingStone[] = [];
+
+	/** リリース済み投球駒を現在の物理状態から採点する評価器です。 */
+	readonly scoreEvaluator: OrbitScoreEvaluator;
 
 	/** 現在の試合状態です。 */
 	private currentState: MatchState = MatchState.Aiming;
@@ -72,9 +96,19 @@ export class MatchController {
 	/** 現在の投球で完了した固定物理ステップ相当のゲーム内時間（s）です。 */
 	private shotSimulationElapsedSeconds: number = 0;
 
+	/** 試合終了時に確定したRedの得点です。終了前は存在しません。 */
+	private confirmedRedScore: number | undefined;
+
+	/** 試合終了時に確定したBlueの得点です。終了前は存在しません。 */
+	private confirmedBlueScore: number | undefined;
+
+	/** 試合終了時に確定した勝敗です。終了前は存在しません。 */
+	private confirmedResult: MatchResult | undefined;
+
 	/** 既存物理実行器へゲーム進行を接続し、Redの1投目を開始します。 */
-	constructor(simulationRunner: SimulationRunner) {
+	constructor(simulationRunner: SimulationRunner, scoreEvaluator: OrbitScoreEvaluator = new OrbitScoreEvaluator()) {
 		this.simulationRunner = simulationRunner;
+		this.scoreEvaluator = scoreEvaluator;
 		this.newGame();
 	}
 
@@ -128,6 +162,25 @@ export class MatchController {
 		return this.shotSimulationElapsedSeconds;
 	}
 
+	/** Redの暫定得点、または試合終了時に確定した得点を返します。 */
+	get redScore(): number {
+		return this.confirmedRedScore === undefined
+			? this.calculatePlayerScore(Player.Red)
+			: this.confirmedRedScore;
+	}
+
+	/** Blueの暫定得点、または試合終了時に確定した得点を返します。 */
+	get blueScore(): number {
+		return this.confirmedBlueScore === undefined
+			? this.calculatePlayerScore(Player.Blue)
+			: this.confirmedBlueScore;
+	}
+
+	/** 試合終了時に確定した勝敗を返します。終了前はundefinedです。 */
+	get result(): MatchResult | undefined {
+		return this.confirmedResult;
+	}
+
 	/** 表示用に、現在プレイヤーがこれから投げる番号を返します。 */
 	getCurrentPlayerShotNumber(): number {
 		if (this.currentState === MatchState.MatchFinished) {
@@ -166,6 +219,7 @@ export class MatchController {
 		if (this.currentState !== MatchState.Aiming || this.currentActiveStone === undefined) {
 			return false;
 		}
+		this.currentActiveStone.markReleased();
 		if (this.currentActiveStone.owner === Player.Red) {
 			this.redCompletedShots += 1;
 		} else {
@@ -179,7 +233,7 @@ export class MatchController {
 	}
 
 	/**
-	 * 指定時間のうち5年の境界までだけを固定dtで進め、実際に進んだ時間（s）を返します。
+	 * 指定時間のうち10年の境界までだけを固定dtで進め、実際に進んだ時間（s）を返します。
 	 * accumulator中の端数も差し引くため、最後の描画フレーム分を余計に進めません。
 	 */
 	advanceSimulation(simulationSeconds: number): number {
@@ -199,9 +253,12 @@ export class MatchController {
 
 		if (this.shotSimulationElapsedSeconds >= Setting.SimulationDurationPerShotSeconds) {
 			this.shotSimulationElapsedSeconds = Setting.SimulationDurationPerShotSeconds;
-			this.currentState = this.totalCompletedShots >= this.maximumTotalShots
-				? MatchState.MatchFinished
-				: MatchState.TurnTransition;
+			if (this.totalCompletedShots >= this.maximumTotalShots) {
+				this.confirmMatchResult();
+				this.currentState = MatchState.MatchFinished;
+			} else {
+				this.currentState = MatchState.TurnTransition;
+			}
 		}
 		return advancedSeconds;
 	}
@@ -225,6 +282,9 @@ export class MatchController {
 		this.blueCompletedShots = 0;
 		this.currentTurnPlayer = Player.Red;
 		this.shotSimulationElapsedSeconds = 0;
+		this.confirmedRedScore = undefined;
+		this.confirmedBlueScore = undefined;
+		this.confirmedResult = undefined;
 		this.currentCentralBody = this.createCentralBody();
 		this.simulationRunner.world.addBody(this.currentCentralBody);
 		this.beginTurn();
@@ -233,6 +293,29 @@ export class MatchController {
 	/** 指定プレイヤーのリリース済み投球数を返します。 */
 	private getCompletedShots(player: Player): number {
 		return player === Player.Red ? this.redCompletedShots : this.blueCompletedShots;
+	}
+
+	/** 現在の中心天体に対して、指定プレイヤーのリリース済み投球だけを合計します。 */
+	private calculatePlayerScore(player: Player): number {
+		return this.stones.reduce((total: number, stone: CurlingStone): number => {
+			if (stone.owner !== player || !stone.isReleased) {
+				return total;
+			}
+			return total + this.scoreEvaluator.evaluate(stone.body, this.centralBody).points;
+		}, 0);
+	}
+
+	/** 6投終了時の得点を固定し、Red勝利・Blue勝利・引き分けを決定します。 */
+	private confirmMatchResult(): void {
+		this.confirmedRedScore = this.calculatePlayerScore(Player.Red);
+		this.confirmedBlueScore = this.calculatePlayerScore(Player.Blue);
+		if (this.confirmedRedScore > this.confirmedBlueScore) {
+			this.confirmedResult = MatchResult.RedWin;
+		} else if (this.confirmedBlueScore > this.confirmedRedScore) {
+			this.confirmedResult = MatchResult.BlueWin;
+		} else {
+			this.confirmedResult = MatchResult.Draw;
+		}
 	}
 
 	/** 現在プレイヤーの新しい駒を物理世界へ追加し、照準を開始します。 */

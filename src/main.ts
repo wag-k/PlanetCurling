@@ -1,5 +1,5 @@
 import {GameBalance} from "./game_balance";
-import {CurlingStone, MatchController, MatchState, Player} from "./match_controller";
+import {CurlingStone, MatchController, MatchResult, MatchState, Player} from "./match_controller";
 import {createPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
 import {PlanetRenderer, PlanetView} from "./rendering";
@@ -52,6 +52,22 @@ function main(_param: g.GameMainParameterObject): void {
 			x: 10,
 			y: 42
 		});
+		const scoreLabel: g.Label = new g.Label({
+			scene: scene,
+			font: font,
+			text: "",
+			fontSize: 22,
+			x: 10,
+			y: 72
+		});
+		const targetOrbitLabel: g.Label = new g.Label({
+			scene: scene,
+			font: font,
+			text: "Target: 2 AU  Rings = position guide; radial speed also counts",
+			fontSize: 15,
+			x: 150,
+			y: 104
+		});
 		const newGameButton: g.FilledRect = new g.FilledRect({
 			scene: scene,
 			cssColor: "#303030",
@@ -84,11 +100,17 @@ function main(_param: g.GameMainParameterObject): void {
 				stateLabel.text = "Simulating...";
 			} else if (matchController.state === MatchState.TurnTransition) {
 				stateLabel.text = "Next turn...";
+			} else if (matchController.result === MatchResult.RedWin) {
+				stateLabel.text = "Match Finished - RED WINS";
+			} else if (matchController.result === MatchResult.BlueWin) {
+				stateLabel.text = "Match Finished - BLUE WINS";
 			} else {
-				stateLabel.text = "Match Finished";
+				stateLabel.text = "Match Finished - DRAW";
 			}
+			scoreLabel.text = "RED " + matchController.redScore + "  -  " + matchController.blueScore + " BLUE";
 			turnLabel.invalidate();
 			stateLabel.invalidate();
+			scoreLabel.invalidate();
 		}
 
 		/** 指定した駒のViewへ、その駒がactiveStoneの場合だけ有効になる入力を接続します。 */
@@ -125,6 +147,7 @@ function main(_param: g.GameMainParameterObject): void {
 		/** New Game後の新しい物理モデルに合わせて全Viewを作り直します。 */
 		function rebuildPlanetViews(): void {
 			renderer.clear();
+			renderer.setTargetOrbit(matchController.centralBody);
 			renderer.addPlanet(matchController.centralBody, "sun");
 			synchronizeStoneViews();
 			renderer.update();
@@ -139,6 +162,8 @@ function main(_param: g.GameMainParameterObject): void {
 		rebuildPlanetViews();
 		scene.append(turnLabel);
 		scene.append(stateLabel);
+		scene.append(scoreLabel);
+		scene.append(targetOrbitLabel);
 		scene.append(newGameButton);
 		scene.append(newGameLabel);
 		updateLabels();

@@ -40,6 +40,22 @@ function main(_param) {
             x: 10,
             y: 42
         });
+        var scoreLabel = new g.Label({
+            scene: scene,
+            font: font,
+            text: "",
+            fontSize: 22,
+            x: 10,
+            y: 72
+        });
+        var targetOrbitLabel = new g.Label({
+            scene: scene,
+            font: font,
+            text: "Target: 2 AU  Rings = position guide; radial speed also counts",
+            fontSize: 15,
+            x: 150,
+            y: 104
+        });
         var newGameButton = new g.FilledRect({
             scene: scene,
             cssColor: "#303030",
@@ -74,11 +90,19 @@ function main(_param) {
             else if (matchController.state === match_controller_1.MatchState.TurnTransition) {
                 stateLabel.text = "Next turn...";
             }
-            else {
-                stateLabel.text = "Match Finished";
+            else if (matchController.result === match_controller_1.MatchResult.RedWin) {
+                stateLabel.text = "Match Finished - RED WINS";
             }
+            else if (matchController.result === match_controller_1.MatchResult.BlueWin) {
+                stateLabel.text = "Match Finished - BLUE WINS";
+            }
+            else {
+                stateLabel.text = "Match Finished - DRAW";
+            }
+            scoreLabel.text = "RED " + matchController.redScore + "  -  " + matchController.blueScore + " BLUE";
             turnLabel.invalidate();
             stateLabel.invalidate();
+            scoreLabel.invalidate();
         }
         /** 指定した駒のViewへ、その駒がactiveStoneの場合だけ有効になる入力を接続します。 */
         function bindStoneInput(stone, view) {
@@ -112,6 +136,7 @@ function main(_param) {
         /** New Game後の新しい物理モデルに合わせて全Viewを作り直します。 */
         function rebuildPlanetViews() {
             renderer.clear();
+            renderer.setTargetOrbit(matchController.centralBody);
             renderer.addPlanet(matchController.centralBody, "sun");
             synchronizeStoneViews();
             renderer.update();
@@ -124,6 +149,8 @@ function main(_param) {
         rebuildPlanetViews();
         scene.append(turnLabel);
         scene.append(stateLabel);
+        scene.append(scoreLabel);
+        scene.append(targetOrbitLabel);
         scene.append(newGameButton);
         scene.append(newGameLabel);
         updateLabels();

@@ -109,6 +109,11 @@
 			"type": "script",
 			"path": "script/match_controller.js",
 			"global": true
+		},
+		"orbit_score": {
+			"type": "script",
+			"path": "script/orbit_score.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

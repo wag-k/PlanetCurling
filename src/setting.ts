@@ -24,9 +24,19 @@ export class Setting {
 		return 900 * Setting.SecondsPerDay;
 	}
 
-	/** 1投のリリース後に物理世界を進める固定ゲーム内時間（5年）です。 */
+	/** 1投のリリース後に物理世界を進める固定ゲーム内時間（10年）です。 */
 	static get SimulationDurationPerShotSeconds(): number {
-		return 5 * Setting.SecondsPerYear;
+		return 10 * Setting.SecondsPerYear;
+	}
+
+	/** ドラッグから求めた基準速度へ最後に掛ける、ゲームプレイ調整用の倍率です。 */
+	static get LaunchVelocityMultiplier(): number {
+		return 1.5;
+	}
+
+	/** 軌道得点で動径速度を距離誤差へ換算する基準時間です。 */
+	static get ScoreVelocityReferenceSeconds(): number {
+		return Setting.SecondsPerYear;
 	}
 
 	/** RedとBlueがそれぞれ投げる回数です。 */

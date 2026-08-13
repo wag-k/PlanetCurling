@@ -1,5 +1,80 @@
+import {GameBalance} from "./game_balance";
 import {squareSumRoot} from "./motion";
 import {Planet} from "./planet";
+
+/** 中心天体を追従し、位置誤差の得点帯を点線の同心円で示すViewです。 */
+export class TargetOrbitView {
+	/** すべてのリング片をまとめて移動する親Entityです。 */
+	readonly entity: g.E;
+
+	/** リングの中心として追従する動的な中心天体です。 */
+	private currentCentralBody: Planet;
+
+	/** 物理世界の表示幅（m）です。 */
+	private readonly worldSpanMeters: number;
+
+	/** 物理世界の表示幅に対応する画面短辺（px）です。 */
+	private readonly viewportShortSidePixels: number;
+
+	/** 位置誤差だけを示す同心円ガイドを生成します。 */
+	constructor(scene: g.Scene, centralBody: Planet, worldSpanMeters: number) {
+		this.currentCentralBody = centralBody;
+		this.worldSpanMeters = worldSpanMeters;
+		this.viewportShortSidePixels = Math.min(g.game.width, g.game.height);
+		this.entity = new g.E({scene: scene});
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.OnePointOrbitErrorMetres, "#26384d", 2);
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.OnePointOrbitErrorMetres, "#26384d", 2);
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.TwoPointOrbitErrorMetres, "#36577a", 2);
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.TwoPointOrbitErrorMetres, "#36577a", 2);
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.ThreePointOrbitErrorMetres, "#4c86a8", 3);
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.ThreePointOrbitErrorMetres, "#4c86a8", 3);
+		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres, "#8be9fd", 4);
+		scene.append(this.entity);
+		this.update();
+	}
+
+	/** New Game後の新しい中心天体へ追従先を切り替えます。 */
+	setCentralBody(centralBody: Planet): void {
+		this.currentCentralBody = centralBody;
+		this.update();
+	}
+
+	/** 中心天体の最新位置へリング群を同期します。 */
+	update(): void {
+		this.entity.x = metersToPixels(
+			this.currentCentralBody.pos.x,
+			this.worldSpanMeters,
+			this.viewportShortSidePixels
+		);
+		this.entity.y = metersToPixels(
+			this.currentCentralBody.pos.y,
+			this.worldSpanMeters,
+			this.viewportShortSidePixels
+		);
+		this.entity.modified();
+	}
+
+	/** 円周上へ小さなFilledRectを並べ、外部描画ライブラリなしの点線リングを追加します。 */
+	private addRing(scene: g.Scene, radiusMetres: number, cssColor: string, dotSizePixels: number): void {
+		const segmentCount: number = 64;
+		const radiusPixels: number = metersToPixels(
+			radiusMetres,
+			this.worldSpanMeters,
+			this.viewportShortSidePixels
+		);
+		for (let index: number = 0; index < segmentCount; index += 1) {
+			const angle: number = index / segmentCount * Math.PI * 2;
+			this.entity.append(new g.FilledRect({
+				scene: scene,
+				cssColor: cssColor,
+				x: Math.cos(angle) * radiusPixels - dotSizePixels / 2,
+				y: Math.sin(angle) * radiusPixels - dotSizePixels / 2,
+				width: dotSizePixels,
+				height: dotSizePixels
+			}));
+		}
+	}
+}
 
 /**
  * SI単位の物理モデルをAkashicのSpriteへ投影する、天体1個分のViewです。
@@ -116,6 +191,9 @@ export class PlanetRenderer {
 	/** 登録済みの天体Viewです。 */
 	private readonly views: PlanetView[] = [];
 
+	/** 盤面の背面で中心天体を追従するターゲット軌道Viewです。 */
+	private targetOrbitView: TargetOrbitView | undefined;
+
 	/** 描画同期先を生成します。 */
 	constructor(scene: g.Scene, worldSpanMeters: number) {
 		this.scene = scene;
@@ -135,6 +213,15 @@ export class PlanetRenderer {
 		return view;
 	}
 
+	/** ターゲット軌道を初回生成するか、New Game後の中心天体へ追従先を更新します。 */
+	setTargetOrbit(centralBody: Planet): void {
+		if (this.targetOrbitView === undefined) {
+			this.targetOrbitView = new TargetOrbitView(this.scene, centralBody, this.worldSpanMeters);
+		} else {
+			this.targetOrbitView.setCentralBody(centralBody);
+		}
+	}
+
 	/** 指定した物理モデルへ対応する登録済みViewを返します。 */
 	findView(model: Planet): PlanetView | undefined {
 		return this.views.filter((view: PlanetView): boolean => view.model === model)[0];
@@ -148,6 +235,9 @@ export class PlanetRenderer {
 
 	/** 全Viewを各物理モデルの最新状態へ同期します。 */
 	update(): void {
+		if (this.targetOrbitView !== undefined) {
+			this.targetOrbitView.update();
+		}
 		this.views.forEach((view: PlanetView): void => view.update());
 	}
 }

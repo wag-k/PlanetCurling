@@ -11,9 +11,14 @@ export function calculateLaunchVelocity(
 	worldWidthMeters: number,
 	viewportWidthPixels: number,
 	velocityReferenceSeconds: number = Setting.InputVelocityReferenceSeconds,
-	dragVelocityDivisor: number = Setting.DragVelocityDivisor
+	dragVelocityDivisor: number = Setting.DragVelocityDivisor,
+	launchVelocityMultiplier: number = Setting.LaunchVelocityMultiplier
 ): Velocity {
 	const velocityPerPixel: number =
-		-worldWidthMeters / velocityReferenceSeconds / viewportWidthPixels / dragVelocityDivisor;
+		-worldWidthMeters
+		/ velocityReferenceSeconds
+		/ viewportWidthPixels
+		/ dragVelocityDivisor
+		* launchVelocityMultiplier;
 	return new Velocity(velocityPerPixel * dragXPixels, velocityPerPixel * dragYPixels);
 }

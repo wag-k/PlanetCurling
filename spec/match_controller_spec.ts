@@ -1,6 +1,7 @@
 import {GameBalance} from "../src/game_balance";
-import {MatchController, MatchState, Player} from "../src/match_controller";
+import {MatchController, MatchResult, MatchState, Player} from "../src/match_controller";
 import {Velocity} from "../src/motion";
+import {PhysicalConstant} from "../src/physical_constant";
 import {IPhysicsIntegrator, PhysicsIntegratorKind} from "../src/physics_integrator";
 import {PhysicsWorld} from "../src/physics_world";
 import {Setting} from "../src/setting";
@@ -19,6 +20,31 @@ function createController(): MatchController {
 		integrator,
 		Setting.PhysicsStepSeconds
 	));
+}
+
+/** 指定した点数になる位置へactiveStoneを置き、1試合を最後まで進めます。 */
+function completeMatch(controller: MatchController, redPoints: number, bluePoints: number): void {
+	for (let shotIndex: number = 0; shotIndex < controller.maximumTotalShots; shotIndex += 1) {
+		const desiredPoints: number = controller.currentPlayer === Player.Red ? redPoints : bluePoints;
+		const errorByPoints: {[points: number]: number} = {
+			0: 1.1,
+			1: 0.7,
+			2: 0.3,
+			3: 0
+		};
+		const activeBody = controller.activeStone!.body;
+		activeBody.pos.x = controller.centralBody.pos.x
+			+ GameBalance.TargetOrbitRadiusMetres
+			+ errorByPoints[desiredPoints] * PhysicalConstant.AstroUnit;
+		activeBody.pos.y = controller.centralBody.pos.y;
+		activeBody.velocity.x = controller.centralBody.velocity.x;
+		activeBody.velocity.y = controller.centralBody.velocity.y;
+		controller.releaseActiveStone();
+		controller.advanceSimulation(Setting.SimulationDurationPerShotSeconds);
+		if (shotIndex < controller.maximumTotalShots - 1) {
+			controller.completeTurnTransition();
+		}
+	}
 }
 
 describe("ローカル2人対戦のターン進行", (): void => {
@@ -61,7 +87,7 @@ describe("ローカル2人対戦のターン進行", (): void => {
 		expect(controller.setActiveStoneVelocity(new Velocity(1, 1))).toBe(false);
 	});
 
-	it("5年の固定dt境界で停止し、余分なフレーム時間を進めない", (): void => {
+	it("10年の固定dt境界で停止し、余分なフレーム時間を進めない", (): void => {
 		const controller: MatchController = createController();
 		const halfStep: number = Setting.PhysicsStepSeconds / 2;
 
@@ -114,6 +140,42 @@ describe("ローカル2人対戦のターン進行", (): void => {
 		expect(secondStoneBody.velocity).toEqual(new Velocity(-30, 40));
 	});
 
+	it("activeStoneを除外し、リリース済み投球の現在状態だけを再採点する", (): void => {
+		const controller: MatchController = createController();
+		const firstStone = controller.activeStone!;
+		firstStone.body.pos.x = controller.centralBody.pos.x + GameBalance.TargetOrbitRadiusMetres;
+		firstStone.body.pos.y = controller.centralBody.pos.y;
+
+		expect(firstStone.isReleased).toBe(false);
+		expect(controller.redScore).toBe(0);
+
+		controller.releaseActiveStone();
+		expect(firstStone.isReleased).toBe(true);
+		expect(controller.redScore).toBe(3);
+
+		firstStone.body.pos.x += 0.6 * PhysicalConstant.AstroUnit;
+		expect(controller.redScore).toBe(1);
+		expect(controller.blueScore).toBe(0);
+	});
+
+	it.each([
+		[3, 0, MatchResult.RedWin, 9, 0],
+		[0, 3, MatchResult.BlueWin, 0, 9],
+		[2, 2, MatchResult.Draw, 6, 6]
+	])(
+		"6投終了時にRed %s点石・Blue %s点石を %s として確定する",
+		(redPoints: number, bluePoints: number, result: MatchResult, redTotal: number, blueTotal: number): void => {
+			const controller: MatchController = createController();
+
+			completeMatch(controller, redPoints, bluePoints);
+
+			expect(controller.state).toBe(MatchState.MatchFinished);
+			expect(controller.redScore).toBe(redTotal);
+			expect(controller.blueScore).toBe(blueTotal);
+			expect(controller.result).toBe(result);
+		}
+	);
+
 	it("New Gameで中央天体とRedの1投目だけの初期盤面へ戻る", (): void => {
 		const controller: MatchController = createController();
 		const previousCentralBody = controller.centralBody;
@@ -131,12 +193,30 @@ describe("ローカル2人対戦のターン進行", (): void => {
 		expect(controller.centralBody).not.toBe(previousCentralBody);
 		expect(controller.simulationRunner.getCompletedStepCount()).toBe(0);
 		expect(controller.simulationRunner.getRemainingSimulationSeconds()).toBe(0);
+		expect(controller.stones[0].isReleased).toBe(false);
+		expect(controller.redScore).toBe(0);
+		expect(controller.blueScore).toBe(0);
+		expect(controller.result).toBeUndefined();
+	});
+
+	it("終了済みの得点・勝敗・評価対象をNew Gameで消去する", (): void => {
+		const controller: MatchController = createController();
+		completeMatch(controller, 3, 0);
+		expect(controller.result).toBe(MatchResult.RedWin);
+
+		controller.newGame();
+
+		expect(controller.redScore).toBe(0);
+		expect(controller.blueScore).toBe(0);
+		expect(controller.result).toBeUndefined();
+		expect(controller.stones).toHaveLength(1);
+		expect(controller.stones[0].isReleased).toBe(false);
 	});
 });
 
-describe("G1ゲーム設定", (): void => {
-	it("1投後の物理時間は365日基準の5年で、6時間dtの整数倍である", (): void => {
-		expect(Setting.SimulationDurationPerShotSeconds).toBe(5 * 365 * 24 * 60 * 60);
+describe("G2ゲーム設定", (): void => {
+	it("1投後の物理時間は365日基準の10年で、6時間dtの整数倍である", (): void => {
+		expect(Setting.SimulationDurationPerShotSeconds).toBe(10 * 365 * 24 * 60 * 60);
 		expect(Setting.SimulationDurationPerShotSeconds % Setting.PhysicsStepSeconds).toBe(0);
 	});
 

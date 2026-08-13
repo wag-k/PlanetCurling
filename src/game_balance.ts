@@ -49,4 +49,24 @@ export class GameBalance {
 	static get CentralBodyStartYMetres(): number {
 		return 5 * PhysicalConstant.AstroUnit;
 	}
+
+	/** 中心天体から測るターゲット軌道の半径（m）です。 */
+	static get TargetOrbitRadiusMetres(): number {
+		return 2 * PhysicalConstant.AstroUnit;
+	}
+
+	/** 3点になる実効軌道誤差の上限（m）です。 */
+	static get ThreePointOrbitErrorMetres(): number {
+		return 0.2 * PhysicalConstant.AstroUnit;
+	}
+
+	/** 2点になる実効軌道誤差の上限（m）です。 */
+	static get TwoPointOrbitErrorMetres(): number {
+		return 0.5 * PhysicalConstant.AstroUnit;
+	}
+
+	/** 1点になる実効軌道誤差の上限（m）です。 */
+	static get OnePointOrbitErrorMetres(): number {
+		return PhysicalConstant.AstroUnit;
+	}
 }
