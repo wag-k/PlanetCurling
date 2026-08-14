@@ -134,12 +134,16 @@ function main(_param) {
         /** 物理世界へ動的追加された投球駒に、所有者別の既存画像Viewを追加します。 */
         function synchronizeStoneViews() {
             matchController.stones.forEach(function (stone) {
-                if (renderer.findView(stone.body) !== undefined) {
+                var existingView = renderer.findView(stone.body);
+                if (existingView !== undefined) {
+                    existingView.setVisible(!stone.isAbsorbed);
                     return;
                 }
                 var imageAssetId = stone.owner === match_controller_1.Player.Red ? "planet1" : "planet2";
                 renderer.addStoneTrajectory(stone);
-                bindStoneInput(stone, renderer.addPlanet(stone.body, imageAssetId, true));
+                var newView = renderer.addPlanet(stone.body, imageAssetId, true);
+                newView.setVisible(!stone.isAbsorbed);
+                bindStoneInput(stone, newView);
             });
         }
         /** New Game後の新しい物理モデルに合わせて全Viewを作り直します。 */

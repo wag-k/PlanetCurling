@@ -1,3 +1,4 @@
+import {CollisionEvent} from "./collision";
 import {calculateAccelerations} from "./gravity";
 import {calculateLaunchVelocity} from "./input_velocity";
 import {MatchController, MatchState} from "./match_controller";
@@ -67,6 +68,10 @@ export class Universe {
 			this.matchController.completeTurnTransition();
 			this.refreshAccelerations();
 		}
+		const collisionEvents: CollisionEvent[] = this.matchController.consumeCollisionEvents();
+		if (collisionEvents.length > 0) {
+			this.renderer.addCollisionEffects(collisionEvents);
+		}
 		this.renderer.update();
 	}
 
@@ -127,7 +132,8 @@ export class Universe {
 		const points: TrajectoryPoint[] = this.trajectoryPredictor.predict(
 			this.matchController.simulationRunner.world,
 			activeBody,
-			launchVelocity
+			launchVelocity,
+			this.matchController.simulationRunner.getCollisionSystem()
 		);
 		this.matchController.setActiveStonePredictedTrajectory(points);
 		this.rememberPredictedInput(activeBody, dragXPixels, dragYPixels);

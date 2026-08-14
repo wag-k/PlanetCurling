@@ -1,12 +1,12 @@
 # PlanetCurlingゲーム設計
 
-## Phase G3の目的
+## Phase G4の目的
 
-Phase G3では、G1/G2のターン、強い多体重力、得点・勝敗を維持し、照準中の10年軌道予測と投球後の実軌跡を追加します。予測と実際の違いを可視化し、後続惑星による軌道変化をゲーム性として扱います。
+Phase G4では、G1～G3のターン、強い多体重力、得点・勝敗、軌道表示を維持し、投石同士の反発と中央天体への吸収を追加します。予測と本番に同じ衝突系を使い、ノックアウトをゲーム性として扱います。
 
 ## 決定済みルール
 
-| 項目 | G3仕様 |
+| 項目 | G4仕様 |
 |---|---|
 | Players | Red / Blue（ローカル2人対戦） |
 | Shots per player | 3 |
@@ -22,6 +22,8 @@ Phase G3では、G1/G2のターン、強い多体重力、得点・勝敗を維�
 | Prediction | 現在盤面をcloneし、本番と同じ物理で10年 |
 | Trajectory sample | 10ゲーム日ごと |
 | Display | 点線=予測、実線=実軌跡 |
+| Stone collision | 半径0.15 AU、反発係数0.9 |
+| Central contact | 半径0.25 AU、投石を吸収して0点 |
 
 状態は次の順で遷移します。
 
@@ -61,11 +63,18 @@ Physics
   Gravity
   PhysicsIntegrator
   SimulationRunner
+  CollisionDetector / CollisionResolver / CollisionSystem
 ```
 
 `CurlingStone`が所有者、投球番号、リリース状態、対応する`Planet`、`predictedTrajectory`、`actualTrajectory`を持ちます。軌跡はゲーム側メタデータであり、`Planet`にはRed/Blue、得点、軌跡を追加しません。`OrbitScoreEvaluator`、`TrajectoryPredictor`、`TrajectoryRecorder`もAkashic Engineに依存しません。
 
-各ターンの開始時に速度0の新しいPlanetを共通発射位置へ生成し、PhysicsWorldへ追加します。投球済みPlanetは削除しないため、中央天体とすべての投球惑星が互いに既存のNewton重力を及ぼします。
+各ターンの開始時に速度0の新しいPlanetを共通発射位置へ生成し、PhysicsWorldへ追加します。投球済みPlanetは中央天体と他の投球惑星へ既存のNewton重力を及ぼします。中央天体へ吸収された場合だけPhysicsWorldから除外し、`CurlingStone`の所有者・履歴・軌跡はゲーム側へ残します。
+
+## 衝突・ノックアウト
+
+投石同士は質量差を考慮した円衝突として反発します。6時間dt中の開始位置と終了位置を使う連続判定により、高速ですれ違う場合も最初の接触を検出します。回転、摩擦、トルク、変形はG4に含めません。
+
+中央天体へ接触した投石は吸収状態になります。物理世界と重力源から除外し、Spriteを非表示にし、得点は0です。実軌跡は接触位置を最終点として止まります。投石同士の衝突後は実軌跡を継続し、曲がった経路を残します。衝突と吸収は異なる色の短時間フラッシュで区別します。音と衝突半径のデバッグ表示は初期実装に含めません。
 
 ## 固定時間と発射速度
 
@@ -137,7 +146,7 @@ effectiveOrbitError = radialDistanceError
 
 ## 暫定得点と勝敗
 
-採点対象は`isReleased === true`の投球だけです。照準中の`activeStone`は物理世界に存在していても得点へ含めません。
+採点対象は`isReleased === true`かつ未吸収の投球だけです。照準中の`activeStone`は物理世界に存在していても得点へ含めず、吸収済み投石は常に0点です。
 
 試合中のRed / Blue得点は、表示時点の中心天体と全リリース済み投球から再計算します。そのため、後続投球の重力で過去の投球や中心天体が動くと暫定得点も変化します。6投目の10年シミュレーション終了時に得点を確定し、次のいずれかを保存します。
 
@@ -160,9 +169,9 @@ effectiveOrbitError = radialDistanceError
 - Phase G1: ローカル2人対戦・ターン進行（完了）
 - Phase G2: プレイ調整・ターゲット軌道・得点・勝敗（完了）
 - Phase G3: 軌道予測・実軌跡（完了）
-- Phase G4: 衝突
+- Phase G4: 衝突・ノックアウト（完了）
 - Phase G5: UI・演出・バランス調整
 - Phase G6: CPU対戦
 - Phase G7: 簡易オンライン対戦
 
-G4以降の衝突、CPU/AI、ネット対戦、難易度選択、ランキング、ステージ制、タイブレークはG3のスコープ外です。
+G5以降のCPU/AI、ネット対戦、難易度選択、ランキング、ステージ制、タイブレークはG4のスコープ外です。

@@ -25,6 +25,11 @@ export class GameBalance {
 		return 40000;
 	}
 
+	/** 投石同士のゲームプレイ上の衝突半径（m）です。描画半径とは独立しています。 */
+	static get StoneCollisionRadiusMetres(): number {
+		return 0.15 * PhysicalConstant.AstroUnit;
+	}
+
 	/** 相互重力をゲーム上認識できる強さにする暫定投球惑星質量（kg）です。 */
 	static get StoneMassKg(): number {
 		return 6 * Math.pow(10, 24);
@@ -38,6 +43,16 @@ export class GameBalance {
 	/** 中央天体の半径（m）です。固定物体化には使用しません。 */
 	static get CentralBodyRadiusMetres(): number {
 		return 40000;
+	}
+
+	/** 中央天体のゲームプレイ上の吸収半径（m）です。描画半径とは独立しています。 */
+	static get CentralBodyCollisionRadiusMetres(): number {
+		return 0.25 * PhysicalConstant.AstroUnit;
+	}
+
+	/** 投石同士の反発係数です。 */
+	static get StoneCollisionRestitution(): number {
+		return 0.9;
 	}
 
 	/** 中央天体の初期x座標（m）です。 */

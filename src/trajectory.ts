@@ -1,3 +1,4 @@
+import {CollisionEvent, CollisionSystem} from "./collision";
 import {Velocity} from "./motion";
 import {createPhysicsIntegrator, PhysicsIntegratorKind} from "./physics_integrator";
 import {PhysicsWorld, PhysicsWorldClone} from "./physics_world";
@@ -68,6 +69,16 @@ export class TrajectoryRecorder {
 		return true;
 	}
 
+	/** 吸収などで物理参加を終える天体の現在位置を、重複を避けて最終点として追加します。 */
+	recordFinal(body: Planet): boolean {
+		const lastPoint: TrajectoryPoint | undefined = this.recordedPoints[this.recordedPoints.length - 1];
+		if (lastPoint !== undefined && lastPoint.xMetres === body.pos.x && lastPoint.yMetres === body.pos.y) {
+			return false;
+		}
+		this.recordedPoints.push(new TrajectoryPoint(body.pos.x, body.pos.y, this.elapsedSeconds));
+		return true;
+	}
+
 	/** 呼び出し側から配列を変更できないよう、記録点の浅いコピーを返します。 */
 	getPoints(): TrajectoryPoint[] {
 		return this.recordedPoints.slice();
@@ -88,6 +99,9 @@ export class TrajectoryPredictor {
 	/** 描画用の予測点だけを保存するsample間隔（s）です。 */
 	readonly sampleIntervalSeconds: number;
 
+	/** 直前の予測中に発生した衝突通知です。物理座標で本番との整合を診断できます。 */
+	private readonly lastPredictionCollisionEvents: CollisionEvent[] = [];
+
 	/** 本番と一致する物理条件を保持する予測器を生成します。 */
 	constructor(
 		integratorKind: PhysicsIntegratorKind,
@@ -107,11 +121,22 @@ export class TrajectoryPredictor {
 		this.sampleIntervalSeconds = sampleIntervalSeconds;
 	}
 
+	/** 直前の予測中に発生した衝突通知の浅いコピーを返します。 */
+	getLastCollisionEvents(): CollisionEvent[] {
+		return this.lastPredictionCollisionEvents.slice();
+	}
+
 	/**
 	 * 本番世界をdeep cloneし、指定天体のcloneだけへ仮速度を設定して将来位置を返します。
 	 * originalWorld、activeBody、launchVelocityには一切変更を加えません。
 	 */
-	predict(originalWorld: PhysicsWorld, activeBody: Planet, launchVelocity: Velocity): TrajectoryPoint[] {
+	predict(
+		originalWorld: PhysicsWorld,
+		activeBody: Planet,
+		launchVelocity: Velocity,
+		collisionSystem?: CollisionSystem
+	): TrajectoryPoint[] {
+		this.lastPredictionCollisionEvents.splice(0, this.lastPredictionCollisionEvents.length);
 		const clonedWorld: PhysicsWorldClone = originalWorld.cloneWithMapping();
 		const clonedActiveBody: Planet = clonedWorld.getClonedBody(activeBody);
 		clonedActiveBody.velocity.x = launchVelocity.x;
@@ -124,9 +149,22 @@ export class TrajectoryPredictor {
 			createPhysicsIntegrator(this.integratorKind),
 			this.physicsStepSeconds
 		);
+		if (collisionSystem !== undefined) {
+			runner.setCollisionSystem(collisionSystem.cloneForWorld(clonedWorld));
+		}
+		let activeBodyRemoved: boolean = false;
 		runner.advance(
 			this.predictionDurationSeconds,
-			(_world: PhysicsWorld, stepSeconds: number): void => {
+			(_world: PhysicsWorld, stepSeconds: number, collisionEvents: CollisionEvent[]): void => {
+				this.lastPredictionCollisionEvents.push(...collisionEvents);
+				if (activeBodyRemoved) {
+					return;
+				}
+				if (clonedWorld.world.bodies.indexOf(clonedActiveBody) < 0) {
+					recorder.recordFinal(clonedActiveBody);
+					activeBodyRemoved = true;
+					return;
+				}
 				recorder.recordStep(clonedActiveBody, stepSeconds);
 			}
 		);

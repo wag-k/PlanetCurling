@@ -1,3 +1,4 @@
+import {CollisionEvent, CollisionEventKind} from "./collision";
 import {GameBalance} from "./game_balance";
 import {CurlingStone, Player} from "./match_controller";
 import {squareSumRoot} from "./motion";
@@ -174,6 +175,48 @@ export class StoneTrajectoryView extends g.E {
 	}
 }
 
+/** 衝突位置で短時間だけ拡大・減衰する、外部アセット不要のフラッシュ表示です。 */
+export class CollisionEffectView {
+	/** エフェクト本体の矩形です。 */
+	readonly entity: g.FilledRect;
+	/** 表示開始後に経過した描画フレーム数です。 */
+	private elapsedFrames: number = 0;
+	/** エフェクトを表示する総フレーム数です。 */
+	private readonly durationFrames: number = 15;
+
+	/** 衝突種別に応じた色と衝突位置でフラッシュを生成します。 */
+	constructor(scene: g.Scene, parent: g.E, event: CollisionEvent, worldSpanMeters: number) {
+		const viewportPixels: number = Math.min(g.game.width, g.game.height);
+		const sizePixels: number = event.kind === CollisionEventKind.StoneCentralBody ? 32 : 22;
+		this.entity = new g.FilledRect({
+			scene: scene,
+			parent: parent,
+			cssColor: event.kind === CollisionEventKind.StoneCentralBody ? "#ff6ec7" : "#fff176",
+			x: metersToPixels(event.position.x, worldSpanMeters, viewportPixels) - sizePixels / 2,
+			y: metersToPixels(event.position.y, worldSpanMeters, viewportPixels) - sizePixels / 2,
+			width: sizePixels,
+			height: sizePixels,
+			opacity: 0.9
+		});
+	}
+
+	/** 1フレーム進め、表示期間を終えた場合はfalseを返します。 */
+	update(): boolean {
+		this.elapsedFrames += 1;
+		const progress: number = this.elapsedFrames / this.durationFrames;
+		this.entity.opacity = Math.max(0, 0.9 * (1 - progress));
+		this.entity.scaleX = 1 + progress * 1.5;
+		this.entity.scaleY = 1 + progress * 1.5;
+		this.entity.modified();
+		return this.elapsedFrames < this.durationFrames;
+	}
+
+	/** エフェクトEntityをSceneから破棄します。 */
+	destroy(): void {
+		this.entity.destroy();
+	}
+}
+
 /**
  * SI単位の物理モデルをAkashicのSpriteへ投影する、天体1個分のViewです。
  */
@@ -269,6 +312,19 @@ export class PlanetView {
 		this.velocityVector.modified();
 	}
 
+	/** 天体Spriteと付随するベクトル表示をまとめて表示・非表示へ切り替えます。 */
+	setVisible(visible: boolean): void {
+		if (visible) {
+			this.entity.show();
+			this.gravityVector.show();
+			this.velocityVector.show();
+		} else {
+			this.entity.hide();
+			this.gravityVector.hide();
+			this.velocityVector.hide();
+		}
+	}
+
 	/** New Game時に、この天体へ対応するSpriteをSceneから破棄します。 */
 	destroy(): void {
 		this.gravityVector.destroy();
@@ -302,6 +358,12 @@ export class PlanetRenderer {
 	/** UIより背面で天体と既存ベクトルを描く固定レイヤーです。 */
 	private readonly planetLayer: g.E;
 
+	/** UIより背面、天体より前面で衝突フラッシュを描く固定レイヤーです。 */
+	private readonly collisionEffectLayer: g.E;
+
+	/** 現在表示中の短時間衝突フラッシュです。 */
+	private readonly collisionEffects: CollisionEffectView[] = [];
+
 	/** 盤面の背面で中心天体を追従するターゲット軌道Viewです。 */
 	private targetOrbitView: TargetOrbitView | undefined;
 
@@ -312,9 +374,11 @@ export class PlanetRenderer {
 		this.targetLayer = new g.E({scene: scene});
 		this.trajectoryLayer = new g.E({scene: scene});
 		this.planetLayer = new g.E({scene: scene});
+		this.collisionEffectLayer = new g.E({scene: scene});
 		scene.append(this.targetLayer);
 		scene.append(this.trajectoryLayer);
 		scene.append(this.planetLayer);
+		scene.append(this.collisionEffectLayer);
 	}
 
 	/** 物理モデルに対応するViewを生成して返します。 */
@@ -362,12 +426,34 @@ export class PlanetRenderer {
 		return this.views.filter((view: PlanetView): boolean => view.model === model)[0];
 	}
 
+	/** 指定天体のViewが存在する場合に表示・非表示を切り替えます。 */
+	setPlanetVisible(model: Planet, visible: boolean): void {
+		const view: PlanetView | undefined = this.findView(model);
+		if (view !== undefined) {
+			view.setVisible(visible);
+		}
+	}
+
+	/** 発生した衝突通知ごとに短時間のフラッシュを追加します。 */
+	addCollisionEffects(events: CollisionEvent[]): void {
+		events.forEach((event: CollisionEvent): void => {
+			this.collisionEffects.push(new CollisionEffectView(
+				this.scene,
+				this.collisionEffectLayer,
+				event,
+				this.worldSpanMeters
+			));
+		});
+	}
+
 	/** New Game時に全Viewを破棄し、動的な盤面再構築を可能にします。 */
 	clear(): void {
 		this.views.forEach((view: PlanetView): void => view.destroy());
 		this.views.splice(0, this.views.length);
 		this.trajectoryViews.forEach((view: StoneTrajectoryView): void => view.destroy());
 		this.trajectoryViews.splice(0, this.trajectoryViews.length);
+		this.collisionEffects.forEach((effect: CollisionEffectView): void => effect.destroy());
+		this.collisionEffects.splice(0, this.collisionEffects.length);
 	}
 
 	/** 全Viewを各物理モデルの最新状態へ同期します。 */
@@ -377,6 +463,12 @@ export class PlanetRenderer {
 		}
 		this.views.forEach((view: PlanetView): void => view.update());
 		this.trajectoryViews.forEach((view: StoneTrajectoryView): void => view.modified());
+		for (let index: number = this.collisionEffects.length - 1; index >= 0; index -= 1) {
+			if (!this.collisionEffects[index].update()) {
+				this.collisionEffects[index].destroy();
+				this.collisionEffects.splice(index, 1);
+			}
+		}
 	}
 }
 

@@ -144,12 +144,16 @@ function main(_param: g.GameMainParameterObject): void {
 		/** 物理世界へ動的追加された投球駒に、所有者別の既存画像Viewを追加します。 */
 		function synchronizeStoneViews(): void {
 			matchController.stones.forEach((stone: CurlingStone): void => {
-				if (renderer.findView(stone.body) !== undefined) {
+				const existingView: PlanetView | undefined = renderer.findView(stone.body);
+				if (existingView !== undefined) {
+					existingView.setVisible(!stone.isAbsorbed);
 					return;
 				}
 				const imageAssetId: string = stone.owner === Player.Red ? "planet1" : "planet2";
 				renderer.addStoneTrajectory(stone);
-				bindStoneInput(stone, renderer.addPlanet(stone.body, imageAssetId, true));
+				const newView: PlanetView = renderer.addPlanet(stone.body, imageAssetId, true);
+				newView.setVisible(!stone.isAbsorbed);
+				bindStoneInput(stone, newView);
 			});
 		}
 

@@ -6,8 +6,10 @@
 flowchart TD
     Input["Input<br/>Akashicのドラッグ入力"] --> Simulation["Simulation<br/>実時間をゲーム内時間へ換算"]
     Simulation --> Runner["SimulationRunner<br/>accumulatorと固定dt"]
-    Runner --> Integrator["Physics Integrator<br/>Symplectic Euler / Velocity Verlet"]
-    Integrator --> Model["Physics Model<br/>PhysicsWorld / Planet"]
+    Runner --> Collision["Collision System<br/>pre-step safety / swept collision"]
+    Collision --> Integrator["Physics Integrator<br/>Symplectic Euler / Velocity Verlet"]
+    Integrator --> Collision
+    Collision --> Model["Physics Model<br/>PhysicsWorld / Planet"]
     Model --> Renderer["Renderer<br/>モデルからViewへ同期"]
     Renderer --> Akashic["Akashic Engine<br/>Scene / Sprite"]
 ```
@@ -37,7 +39,7 @@ a_i,j = G * m_j / |r_j - r_i|^3 * (r_j - r_i)
 
 `calculateAccelerations(bodies)` は、ある同一時刻の全位置を読み取って全加速度をまとめて返します。積分器は天体を順番に完全更新しないため、更新済み位置と更新前位置が同じ重力評価に混在しません。
 
-同じ位置にある異なる天体間では式が特異になるため、現在は例外にします。衝突判定や重力ソフトニングは意図的に追加していません。
+同じ位置にある異なる天体間では式が特異になります。G4では登録済みの投石と中央天体について、積分前に重なりを解決または吸収してから重力を評価します。衝突対象外として新規追加した天体や、重力ソフトニングは別途考慮が必要です。
 
 ## 固定タイムステップ
 
@@ -48,6 +50,23 @@ a_i,j = G * m_j / |r_j - r_i|^3 * (r_j - r_i)
 ```text
 30 days / 6 hours = 120 steps
 ```
+
+各固定ステップは、初期重なり・吸収の安全処理、開始位置保存、積分、連続衝突解決、通知の順です。衝突系は積分器の外側にあるため、Symplectic EulerとVelocity Verletのどちらでも同じルールを使います。
+
+## 円衝突と連続判定
+
+ゲームプレイ用の衝突半径は描画用`Planet.radius`と分離しています。投石は0.15 AU、中央天体は0.25 AUです。固定dtが6時間と大きいため、ステップ終了位置の重なりだけでなく、相対移動に対して次の二次方程式を解きます。
+
+```text
+|relativeStart + relativeMove × t|² = (radiusA + radiusB)²
+0 <= t <= 1
+```
+
+区間内の最小解を接触時刻とし、接触位置へ戻してから残り時間を衝突後速度で進めます。これにより、1ステップ中に両者の位置が入れ替わる高速衝突も検出します。
+
+投石同士は法線方向へ反発係数0.9のインパルスを適用します。逆質量を使う一般式なので異なる質量にも対応し、接線方向速度は変更しません。分離中の接触には再度インパルスを加えず、めり込みだけを逆質量比で補正します。
+
+中央天体との接触は反発ではなく吸収です。接触した投石を`PhysicsWorld`と衝突対象一覧から除外するため、以後は重力源にもなりません。中央天体の位置・速度・質量は吸収によって変更しません。
 
 ## 描画周期との分離
 
@@ -108,7 +127,7 @@ static get IntegratorKind(): PhysicsIntegratorKind {
 
 ## 本番物理を使う軌道予測
 
-`TrajectoryPredictor`は簡易式や粗いdtを使わず、現在の`PhysicsWorld`をdeep cloneして、本番と同じ`PhysicsIntegratorKind`、6時間dt、10年を別の`SimulationRunner`で計算します。`PhysicsWorld.cloneWithMapping()`が元の`Planet`参照からclone側の対応天体を返すため、予測対象のactiveStoneを配列indexの意味に依存せず指定できます。
+`TrajectoryPredictor`は簡易式や粗いdtを使わず、現在の`PhysicsWorld`をdeep cloneして、本番と同じ`PhysicsIntegratorKind`、6時間dt、10年を別の`SimulationRunner`で計算します。衝突系も天体参照をclone側へ対応付けて複製するため、activeStoneの表示予測に投石反発と中央吸収が反映されます。`PhysicsWorld.cloneWithMapping()`が元の`Planet`参照からclone側の対応天体を返すため、予測対象を配列indexの意味に依存せず指定できます。
 
 clone側のmass、radius、position、velocity、accelerationはすべて独立しています。仮のlaunch velocityと14,600回の予測ステップはcloneだけへ適用され、本番世界へ副作用を与えません。
 
@@ -120,7 +139,7 @@ clone側のmass、radius、position、velocity、accelerationはすべて独立�
 - 早送り・低速化: `SimulationSecondsPerSecond` 相当のランタイム倍率をSimulation層へ追加する
 - 一時停止: `advance()` に渡すゲーム内時間を0にする
 - 描画補間: accumulatorの割合をView用に使い、物理状態を変更せず補間表示する
-- 衝突: 固定ステップごとの物理処理としてIntegrator外側へ衝突解決フェーズを追加する
+- 複数同時衝突: 反復ソルバーや衝突時刻順のイベントキューへ拡張する
 
 これらは拡張点の説明であり、現時点では実装していません。
 

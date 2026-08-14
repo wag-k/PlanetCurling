@@ -1,3 +1,4 @@
+import {BodyPositionSnapshot, CollisionEvent, CollisionSystem} from "./collision";
 import {IPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
 
@@ -13,6 +14,9 @@ export class SimulationRunner {
 
 	/** 現在使用している積分器です。 */
 	private integrator: IPhysicsIntegrator;
+
+	/** 固定ステップ前後に適用する任意の衝突系です。 */
+	private collisionSystem?: CollisionSystem;
 
 	/** まだ固定ステップへ変換できていない端数時間（s）です。 */
 	private accumulatorSeconds: number = 0;
@@ -45,6 +49,16 @@ export class SimulationRunner {
 		return this.integrator;
 	}
 
+	/** 次回以降の固定ステップで使用する衝突系を設定します。 */
+	setCollisionSystem(collisionSystem?: CollisionSystem): void {
+		this.collisionSystem = collisionSystem;
+	}
+
+	/** 現在の衝突系を返します。 */
+	getCollisionSystem(): CollisionSystem | undefined {
+		return this.collisionSystem;
+	}
+
 	/** 固定ステップ未満として保持している端数時間（s）を返します。 */
 	getRemainingSimulationSeconds(): number {
 		return this.accumulatorSeconds;
@@ -73,7 +87,7 @@ export class SimulationRunner {
 	 */
 	advance(
 		simulationSeconds: number,
-		afterStep?: (world: PhysicsWorld, physicsStepSeconds: number) => void
+		afterStep?: (world: PhysicsWorld, physicsStepSeconds: number, collisionEvents: CollisionEvent[]) => void
 	): number {
 		if (simulationSeconds < 0) {
 			throw new Error("シミュレーション時間を負方向へ進めることはできません。");
@@ -82,9 +96,22 @@ export class SimulationRunner {
 		this.accumulatorSeconds += simulationSeconds;
 		let stepCount: number = 0;
 		while (this.accumulatorSeconds >= this.physicsStepSeconds) {
+			const collisionEvents: CollisionEvent[] = this.collisionSystem === undefined
+				? []
+				: this.collisionSystem.resolveBeforeStep(this.world);
+			const startPositions: BodyPositionSnapshot[] = this.collisionSystem === undefined
+				? []
+				: this.collisionSystem.capturePositions();
 			this.integrator.step(this.world, this.physicsStepSeconds);
+			if (this.collisionSystem !== undefined) {
+				collisionEvents.push(...this.collisionSystem.resolveAfterStep(
+					this.world,
+					startPositions,
+					this.physicsStepSeconds
+				));
+			}
 			if (afterStep !== undefined) {
-				afterStep(this.world, this.physicsStepSeconds);
+				afterStep(this.world, this.physicsStepSeconds, collisionEvents);
 			}
 			this.accumulatorSeconds -= this.physicsStepSeconds;
 			stepCount += 1;

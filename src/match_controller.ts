@@ -1,3 +1,4 @@
+import {CollisionEvent, CollisionEventKind, CollisionSystem} from "./collision";
 import {GameBalance} from "./game_balance";
 import {Acceleration, Pos, Velocity} from "./motion";
 import {OrbitScoreEvaluator} from "./orbit_score";
@@ -27,6 +28,14 @@ export enum MatchResult {
 	Draw = "Draw"
 }
 
+/** 投球駒が物理世界へ参加中か、中央天体へ吸収済みかを表します。 */
+export enum CurlingStoneState {
+	/** 通常どおり物理世界へ参加している状態です。 */
+	Active = "Active",
+	/** 中央天体へ吸収され、物理世界から除外された状態です。 */
+	Absorbed = "Absorbed"
+}
+
 /**
  * ゲーム上の投球駒と純粋な物理天体を関連付けます。
  * 所有者や投球番号をPlanetへ追加せず、物理層をゲームルールから分離します。
@@ -43,6 +52,9 @@ export class CurlingStone {
 
 	/** リリース済みならtrueになるゲーム進行上の状態です。 */
 	private released: boolean = false;
+
+	/** 現在の物理参加・吸収状態です。 */
+	private currentState: CurlingStoneState = CurlingStoneState.Active;
 
 	/** 投球確定時に保存する、その投球時点の予測軌道です。Planet物理モデルには保持しません。 */
 	private savedPredictedTrajectory: TrajectoryPoint[] = [];
@@ -66,6 +78,16 @@ export class CurlingStone {
 	/** この駒が照準を終えてリリース済みかを返します。 */
 	get isReleased(): boolean {
 		return this.released;
+	}
+
+	/** 中央天体へ吸収済みならtrueを返します。 */
+	get isAbsorbed(): boolean {
+		return this.currentState === CurlingStoneState.Absorbed;
+	}
+
+	/** 現在の物理参加・吸収状態を返します。 */
+	get state(): CurlingStoneState {
+		return this.currentState;
 	}
 
 	/** 照準中の最新予測、またはリリース時に確定保存した予測軌道を返します。 */
@@ -94,7 +116,19 @@ export class CurlingStone {
 
 	/** 完了した物理ステップ分だけ実軌跡時刻を進め、sample境界なら現在位置を追加します。 */
 	recordActualTrajectoryStep(physicsStepSeconds: number): boolean {
-		return this.released && this.actualTrajectoryRecorder.recordStep(this.body, physicsStepSeconds);
+		return this.released && !this.isAbsorbed
+			&& this.actualTrajectoryRecorder.recordStep(this.body, physicsStepSeconds);
+	}
+
+	/** 中央天体への吸収を確定し、接触位置を実軌跡の最終点として残します。 */
+	markAbsorbed(): void {
+		if (this.isAbsorbed) {
+			return;
+		}
+		this.currentState = CurlingStoneState.Absorbed;
+		if (this.released) {
+			this.actualTrajectoryRecorder.recordFinal(this.body);
+		}
 	}
 }
 
@@ -141,6 +175,9 @@ export class MatchController {
 
 	/** 試合終了時に確定した勝敗です。終了前は存在しません。 */
 	private confirmedResult: MatchResult | undefined;
+
+	/** 描画層が次回取得するまで保持する衝突通知です。 */
+	private readonly pendingCollisionEvents: CollisionEvent[] = [];
 
 	/** 既存物理実行器へゲーム進行を接続し、Redの1投目を開始します。 */
 	constructor(simulationRunner: SimulationRunner, scoreEvaluator: OrbitScoreEvaluator = new OrbitScoreEvaluator()) {
@@ -216,6 +253,13 @@ export class MatchController {
 	/** 試合終了時に確定した勝敗を返します。終了前はundefinedです。 */
 	get result(): MatchResult | undefined {
 		return this.confirmedResult;
+	}
+
+	/** 未取得の衝突通知を返し、内部キューを空にします。 */
+	consumeCollisionEvents(): CollisionEvent[] {
+		const events: CollisionEvent[] = this.pendingCollisionEvents.slice();
+		this.pendingCollisionEvents.splice(0, this.pendingCollisionEvents.length);
+		return events;
 	}
 
 	/** 表示用に、現在プレイヤーがこれから投げる番号を返します。 */
@@ -295,7 +339,10 @@ export class MatchController {
 		const acceptedSeconds: number = Math.min(Math.max(0, simulationSeconds), remainingInputSeconds);
 		const completedSteps: number = this.simulationRunner.advance(
 			acceptedSeconds,
-			(_world, physicsStepSeconds: number): void => this.recordActualTrajectories(physicsStepSeconds)
+			(_world, physicsStepSeconds: number, events: CollisionEvent[]): void => {
+				this.recordActualTrajectories(physicsStepSeconds);
+				this.processCollisionEvents(events);
+			}
 		);
 		const advancedSeconds: number = completedSteps * this.simulationRunner.physicsStepSeconds;
 		this.shotSimulationElapsedSeconds += advancedSeconds;
@@ -334,8 +381,16 @@ export class MatchController {
 		this.confirmedRedScore = undefined;
 		this.confirmedBlueScore = undefined;
 		this.confirmedResult = undefined;
+		this.pendingCollisionEvents.splice(0, this.pendingCollisionEvents.length);
 		this.currentCentralBody = this.createCentralBody();
 		this.simulationRunner.world.addBody(this.currentCentralBody);
+		this.simulationRunner.setCollisionSystem(new CollisionSystem(
+			this.currentCentralBody,
+			[],
+			GameBalance.StoneCollisionRadiusMetres,
+			GameBalance.CentralBodyCollisionRadiusMetres,
+			GameBalance.StoneCollisionRestitution
+		));
 		this.beginTurn();
 	}
 
@@ -347,7 +402,7 @@ export class MatchController {
 	/** 現在の中心天体に対して、指定プレイヤーのリリース済み投球だけを合計します。 */
 	private calculatePlayerScore(player: Player): number {
 		return this.stones.reduce((total: number, stone: CurlingStone): number => {
-			if (stone.owner !== player || !stone.isReleased) {
+			if (stone.owner !== player || !stone.isReleased || stone.isAbsorbed) {
 				return total;
 			}
 			return total + this.scoreEvaluator.evaluate(stone.body, this.centralBody).points;
@@ -358,6 +413,21 @@ export class MatchController {
 	private recordActualTrajectories(physicsStepSeconds: number): void {
 		this.stones.forEach((stone: CurlingStone): void => {
 			stone.recordActualTrajectoryStep(physicsStepSeconds);
+		});
+	}
+
+	/** 衝突通知をゲーム側状態へ反映し、描画用キューへ保存します。 */
+	private processCollisionEvents(events: CollisionEvent[]): void {
+		events.forEach((event: CollisionEvent): void => {
+			if (event.kind === CollisionEventKind.StoneCentralBody) {
+				const absorbedStone: CurlingStone | undefined = this.stones.filter(
+					(stone: CurlingStone): boolean => stone.body === event.firstBody
+				)[0];
+				if (absorbedStone !== undefined) {
+					absorbedStone.markAbsorbed();
+				}
+			}
+			this.pendingCollisionEvents.push(event);
 		});
 	}
 
@@ -384,6 +454,10 @@ export class MatchController {
 		);
 		this.stones.push(stone);
 		this.simulationRunner.world.addBody(stone.body);
+		const collisionSystem: CollisionSystem | undefined = this.simulationRunner.getCollisionSystem();
+		if (collisionSystem !== undefined) {
+			collisionSystem.addStone(stone.body);
+		}
 		this.currentActiveStone = stone;
 		this.currentState = MatchState.Aiming;
 	}

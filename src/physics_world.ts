@@ -45,6 +45,16 @@ export class PhysicsWorld {
 		this.bodies.push(body);
 	}
 
+	/** 指定した天体を物理世界から取り除き、見つかった場合はtrueを返します。 */
+	removeBody(body: Planet): boolean {
+		const bodyIndex: number = this.bodies.indexOf(body);
+		if (bodyIndex < 0) {
+			return false;
+		}
+		this.bodies.splice(bodyIndex, 1);
+		return true;
+	}
+
 	/** New Game時に同じPhysicsWorldインスタンスからすべての天体を取り除きます。 */
 	clearBodies(): void {
 		this.bodies.splice(0, this.bodies.length);

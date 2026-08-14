@@ -119,6 +119,11 @@
 			"type": "script",
 			"path": "script/trajectory.js",
 			"global": true
+		},
+		"collision": {
+			"type": "script",
+			"path": "script/collision.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

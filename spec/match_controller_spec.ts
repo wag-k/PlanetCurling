@@ -16,11 +16,14 @@ function createController(): MatchController {
 			// ゲーム進行テストでは既存積分器の数値計算を重複検証しません。
 		}
 	};
-	return new MatchController(new SimulationRunner(
+	const controller: MatchController = new MatchController(new SimulationRunner(
 		new PhysicsWorld(),
 		integrator,
 		Setting.PhysicsStepSeconds
 	));
+	// G1～G3の進行・採点テストでは、意図的に同一点へ置く石をG4衝突で移動させません。
+	controller.simulationRunner.setCollisionSystem(undefined);
+	return controller;
 }
 
 /** 指定した点数になる位置へactiveStoneを置き、1試合を最後まで進めます。 */
