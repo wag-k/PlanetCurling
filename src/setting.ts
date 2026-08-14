@@ -39,6 +39,26 @@ export class Setting {
 		return Setting.SecondsPerYear;
 	}
 
+	/** 照準中に本番と同じ物理で予測する期間（10ゲーム年）です。 */
+	static get PredictionDurationSeconds(): number {
+		return 10 * Setting.SecondsPerYear;
+	}
+
+	/** 予測軌道と実軌跡を描画点へ間引くゲーム内時間間隔（10日）です。 */
+	static get TrajectorySampleIntervalSeconds(): number {
+		return 10 * Setting.SecondsPerDay;
+	}
+
+	/** 実質的な入力がない予測線を隠すドラッグ距離の下限（px）です。 */
+	static get PredictionMinimumDragPixels(): number {
+		return 2;
+	}
+
+	/** ドラッグ中の予測再計算を抑える入力変化量（px）です。投球速度そのものは丸めません。 */
+	static get PredictionRecalculationThresholdPixels(): number {
+		return 4;
+	}
+
 	/** RedとBlueがそれぞれ投げる回数です。 */
 	static get ShotsPerPlayer(): number {
 		return 3;

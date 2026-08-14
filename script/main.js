@@ -56,6 +56,14 @@ function main(_param) {
             x: 150,
             y: 104
         });
+        var trajectoryLabel = new g.Label({
+            scene: scene,
+            font: font,
+            text: "Dotted: prediction (10y)   Solid: actual trail",
+            fontSize: 15,
+            x: 150,
+            y: 124
+        });
         var newGameButton = new g.FilledRect({
             scene: scene,
             cssColor: "#303030",
@@ -130,6 +138,7 @@ function main(_param) {
                     return;
                 }
                 var imageAssetId = stone.owner === match_controller_1.Player.Red ? "planet1" : "planet2";
+                renderer.addStoneTrajectory(stone);
                 bindStoneInput(stone, renderer.addPlanet(stone.body, imageAssetId, true));
             });
         }
@@ -151,6 +160,7 @@ function main(_param) {
         scene.append(stateLabel);
         scene.append(scoreLabel);
         scene.append(targetOrbitLabel);
+        scene.append(trajectoryLabel);
         scene.append(newGameButton);
         scene.append(newGameLabel);
         updateLabels();

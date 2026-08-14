@@ -6,6 +6,7 @@ import {IPhysicsIntegrator, PhysicsIntegratorKind} from "../src/physics_integrat
 import {PhysicsWorld} from "../src/physics_world";
 import {Setting} from "../src/setting";
 import {SimulationRunner} from "../src/simulation_runner";
+import {TrajectoryPoint} from "../src/trajectory";
 
 /** 位置計算を省略し、ゲーム進行の固定ステップ数だけを検証できるControllerを生成します。 */
 function createController(): MatchController {
@@ -158,6 +159,35 @@ describe("ローカル2人対戦のターン進行", (): void => {
 		expect(controller.blueScore).toBe(0);
 	});
 
+	it("リリース時の予測を保存し、全リリース済み投球の実軌跡を後続ターン中も延長する", (): void => {
+		const controller: MatchController = createController();
+		const firstStone = controller.activeStone!;
+		controller.advanceSimulation(10 * Setting.SecondsPerDay);
+		expect(firstStone.actualTrajectory).toHaveLength(0);
+		const prediction: TrajectoryPoint[] = [
+			new TrajectoryPoint(firstStone.body.pos.x, firstStone.body.pos.y, 0),
+			new TrajectoryPoint(firstStone.body.pos.x + 1, firstStone.body.pos.y + 2, Setting.SecondsPerDay)
+		];
+		controller.setActiveStonePredictedTrajectory(prediction);
+		controller.releaseActiveStone();
+
+		expect(firstStone.predictedTrajectory).toEqual(prediction);
+		expect(firstStone.actualTrajectory).toHaveLength(1);
+		controller.advanceSimulation(Setting.SimulationDurationPerShotSeconds);
+		expect(firstStone.actualTrajectory).toHaveLength(366);
+
+		controller.completeTurnTransition();
+		const secondStone = controller.activeStone!;
+		expect(secondStone.actualTrajectory).toHaveLength(0);
+		controller.releaseActiveStone();
+		controller.advanceSimulation(10 * Setting.SecondsPerDay);
+
+		expect(firstStone.actualTrajectory).toHaveLength(367);
+		expect(secondStone.actualTrajectory).toHaveLength(2);
+		expect(controller.setActiveStonePredictedTrajectory([])).toBe(false);
+		expect(firstStone.predictedTrajectory).toEqual(prediction);
+	});
+
 	it.each([
 		[3, 0, MatchResult.RedWin, 9, 0],
 		[0, 3, MatchResult.BlueWin, 0, 9],
@@ -194,6 +224,8 @@ describe("ローカル2人対戦のターン進行", (): void => {
 		expect(controller.simulationRunner.getCompletedStepCount()).toBe(0);
 		expect(controller.simulationRunner.getRemainingSimulationSeconds()).toBe(0);
 		expect(controller.stones[0].isReleased).toBe(false);
+		expect(controller.stones[0].predictedTrajectory).toHaveLength(0);
+		expect(controller.stones[0].actualTrajectory).toHaveLength(0);
 		expect(controller.redScore).toBe(0);
 		expect(controller.blueScore).toBe(0);
 		expect(controller.result).toBeUndefined();

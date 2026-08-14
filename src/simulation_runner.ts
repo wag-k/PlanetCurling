@@ -69,8 +69,12 @@ export class SimulationRunner {
 	/**
 	 * 指定したゲーム内時間をaccumulatorへ追加し、実行できた固定ステップ数を返します。
 	 * @param simulationSeconds 進めるゲーム内時間（s）
+	 * @param afterStep 各固定物理ステップの完了直後に任意で呼ぶ、記録用途などの副作用コールバック
 	 */
-	advance(simulationSeconds: number): number {
+	advance(
+		simulationSeconds: number,
+		afterStep?: (world: PhysicsWorld, physicsStepSeconds: number) => void
+	): number {
 		if (simulationSeconds < 0) {
 			throw new Error("シミュレーション時間を負方向へ進めることはできません。");
 		}
@@ -79,6 +83,9 @@ export class SimulationRunner {
 		let stepCount: number = 0;
 		while (this.accumulatorSeconds >= this.physicsStepSeconds) {
 			this.integrator.step(this.world, this.physicsStepSeconds);
+			if (afterStep !== undefined) {
+				afterStep(this.world, this.physicsStepSeconds);
+			}
 			this.accumulatorSeconds -= this.physicsStepSeconds;
 			stepCount += 1;
 		}

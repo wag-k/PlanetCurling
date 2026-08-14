@@ -106,9 +106,17 @@ static get IntegratorKind(): PhysicsIntegratorKind {
 
 ドラッグ量から初速度への換算は `calculateLaunchVelocity()` が担当します。換算には `Setting.InputVelocityReferenceSeconds` と `Setting.DragVelocityDivisor` を使い、最後に `Setting.LaunchVelocityMultiplier`（現在は1.5）を掛けます。`PhysicsStepSeconds` は参照しないため、物理dtを変更しても操作感が直接変化しません。
 
+## 本番物理を使う軌道予測
+
+`TrajectoryPredictor`は簡易式や粗いdtを使わず、現在の`PhysicsWorld`をdeep cloneして、本番と同じ`PhysicsIntegratorKind`、6時間dt、10年を別の`SimulationRunner`で計算します。`PhysicsWorld.cloneWithMapping()`が元の`Planet`参照からclone側の対応天体を返すため、予測対象のactiveStoneを配列indexの意味に依存せず指定できます。
+
+clone側のmass、radius、position、velocity、accelerationはすべて独立しています。仮のlaunch velocityと14,600回の予測ステップはcloneだけへ適用され、本番世界へ副作用を与えません。
+
+予測と実軌跡の物理状態は6時間ごとに更新しますが、`TrajectoryRecorder`は10ゲーム日ごとの`TrajectoryPoint`だけを保存します。samplingは描画量と履歴量だけを削減し、積分結果は変えません。`SimulationRunner.advance()`の任意after-stepコールバックを記録に使い、Integratorは物理計算だけを担当します。
+
 ## 将来の拡張ポイント
 
-- 軌道予測: `PhysicsWorld` を複製し、選択中の積分器と固定dtで別の `SimulationRunner` を進める
+- 予測難易度: 現在の10年予測期間を難易度別に変更するUIを追加する
 - 早送り・低速化: `SimulationSecondsPerSecond` 相当のランタイム倍率をSimulation層へ追加する
 - 一時停止: `advance()` に渡すゲーム内時間を0にする
 - 描画補間: accumulatorの割合をView用に使い、物理状態を変更せず補間表示する

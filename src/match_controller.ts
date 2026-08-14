@@ -4,6 +4,7 @@ import {OrbitScoreEvaluator} from "./orbit_score";
 import {Planet} from "./planet";
 import {Setting} from "./setting";
 import {SimulationRunner} from "./simulation_runner";
+import {TrajectoryPoint, TrajectoryRecorder} from "./trajectory";
 
 /** ローカル対戦を行うプレイヤーです。物理モデルへ所有者情報を混在させないため独立させます。 */
 export enum Player {
@@ -43,11 +44,23 @@ export class CurlingStone {
 	/** リリース済みならtrueになるゲーム進行上の状態です。 */
 	private released: boolean = false;
 
+	/** 投球確定時に保存する、その投球時点の予測軌道です。Planet物理モデルには保持しません。 */
+	private savedPredictedTrajectory: TrajectoryPoint[] = [];
+
+	/** 実際に物理時間が進んだときだけ位置をsampleする記録器です。 */
+	private readonly actualTrajectoryRecorder: TrajectoryRecorder;
+
 	/** ゲーム上のメタデータと物理天体の関連を生成します。 */
-	constructor(owner: Player, shotNumber: number, body: Planet) {
+	constructor(
+		owner: Player,
+		shotNumber: number,
+		body: Planet,
+		trajectorySampleIntervalSeconds: number = Setting.TrajectorySampleIntervalSeconds
+	) {
 		this.owner = owner;
 		this.shotNumber = shotNumber;
 		this.body = body;
+		this.actualTrajectoryRecorder = new TrajectoryRecorder(trajectorySampleIntervalSeconds);
 	}
 
 	/** この駒が照準を終えてリリース済みかを返します。 */
@@ -55,9 +68,33 @@ export class CurlingStone {
 		return this.released;
 	}
 
+	/** 照準中の最新予測、またはリリース時に確定保存した予測軌道を返します。 */
+	get predictedTrajectory(): TrajectoryPoint[] {
+		return this.savedPredictedTrajectory.slice();
+	}
+
+	/** リリース後に実際に通過したsample済み軌跡を返します。 */
+	get actualTrajectory(): TrajectoryPoint[] {
+		return this.actualTrajectoryRecorder.getPoints();
+	}
+
+	/** 照準中に表示する予測軌道をゲーム側メタデータへコピーして保存します。 */
+	setPredictedTrajectory(points: TrajectoryPoint[]): void {
+		if (this.released) {
+			return;
+		}
+		this.savedPredictedTrajectory = points.slice();
+	}
+
 	/** この駒をリリース済みにします。 */
 	markReleased(): void {
 		this.released = true;
+		this.actualTrajectoryRecorder.start(this.body);
+	}
+
+	/** 完了した物理ステップ分だけ実軌跡時刻を進め、sample境界なら現在位置を追加します。 */
+	recordActualTrajectoryStep(physicsStepSeconds: number): boolean {
+		return this.released && this.actualTrajectoryRecorder.recordStep(this.body, physicsStepSeconds);
 	}
 }
 
@@ -214,6 +251,15 @@ export class MatchController {
 		return true;
 	}
 
+	/** activeStoneだけへ照準中の予測軌道を保存し、リリース後の変更を防ぎます。 */
+	setActiveStonePredictedTrajectory(points: TrajectoryPoint[]): boolean {
+		if (this.currentState !== MatchState.Aiming || this.currentActiveStone === undefined) {
+			return false;
+		}
+		this.currentActiveStone.setPredictedTrajectory(points);
+		return true;
+	}
+
 	/** activeStoneの投球を確定し、物理シミュレーション状態へ移ります。 */
 	releaseActiveStone(): boolean {
 		if (this.currentState !== MatchState.Aiming || this.currentActiveStone === undefined) {
@@ -247,7 +293,10 @@ export class MatchController {
 				- this.simulationRunner.getRemainingSimulationSeconds()
 		);
 		const acceptedSeconds: number = Math.min(Math.max(0, simulationSeconds), remainingInputSeconds);
-		const completedSteps: number = this.simulationRunner.advance(acceptedSeconds);
+		const completedSteps: number = this.simulationRunner.advance(
+			acceptedSeconds,
+			(_world, physicsStepSeconds: number): void => this.recordActualTrajectories(physicsStepSeconds)
+		);
 		const advancedSeconds: number = completedSteps * this.simulationRunner.physicsStepSeconds;
 		this.shotSimulationElapsedSeconds += advancedSeconds;
 
@@ -303,6 +352,13 @@ export class MatchController {
 			}
 			return total + this.scoreEvaluator.evaluate(stone.body, this.centralBody).points;
 		}, 0);
+	}
+
+	/** 現在リリース済みの全投球について、後続ターン中も実軌跡を継続して延長します。 */
+	private recordActualTrajectories(physicsStepSeconds: number): void {
+		this.stones.forEach((stone: CurlingStone): void => {
+			stone.recordActualTrajectoryStep(physicsStepSeconds);
+		});
 	}
 
 	/** 6投終了時の得点を固定し、Red勝利・Blue勝利・引き分けを決定します。 */

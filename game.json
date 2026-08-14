@@ -114,6 +114,11 @@
 			"type": "script",
 			"path": "script/orbit_score.js",
 			"global": true
+		},
+		"trajectory": {
+			"type": "script",
+			"path": "script/trajectory.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

@@ -68,6 +68,14 @@ function main(_param: g.GameMainParameterObject): void {
 			x: 150,
 			y: 104
 		});
+		const trajectoryLabel: g.Label = new g.Label({
+			scene: scene,
+			font: font,
+			text: "Dotted: prediction (10y)   Solid: actual trail",
+			fontSize: 15,
+			x: 150,
+			y: 124
+		});
 		const newGameButton: g.FilledRect = new g.FilledRect({
 			scene: scene,
 			cssColor: "#303030",
@@ -140,6 +148,7 @@ function main(_param: g.GameMainParameterObject): void {
 					return;
 				}
 				const imageAssetId: string = stone.owner === Player.Red ? "planet1" : "planet2";
+				renderer.addStoneTrajectory(stone);
 				bindStoneInput(stone, renderer.addPlanet(stone.body, imageAssetId, true));
 			});
 		}
@@ -164,6 +173,7 @@ function main(_param: g.GameMainParameterObject): void {
 		scene.append(stateLabel);
 		scene.append(scoreLabel);
 		scene.append(targetOrbitLabel);
+		scene.append(trajectoryLabel);
 		scene.append(newGameButton);
 		scene.append(newGameLabel);
 		updateLabels();
