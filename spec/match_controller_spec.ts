@@ -1,5 +1,5 @@
 import {GameBalance} from "../src/game_balance";
-import {MatchController, MatchResult, MatchState, Player} from "../src/match_controller";
+import {MatchController, MatchResult, MatchState, Player, StoneScoreStatusKind} from "../src/match_controller";
 import {Velocity} from "../src/motion";
 import {PhysicalConstant} from "../src/physical_constant";
 import {IPhysicsIntegrator, PhysicsIntegratorKind} from "../src/physics_integrator";
@@ -250,6 +250,19 @@ describe("ローカル2人対戦のターン進行", (): void => {
 });
 
 describe("G2ゲーム設定", (): void => {
+	it("HUD用Stone状態を未投球・0～3点・吸収へ変換する", (): void => {
+		const controller: MatchController = createController();
+		const stone = controller.activeStone!;
+		expect(controller.getStoneScoreStatus(stone).kind).toBe(StoneScoreStatusKind.Unreleased);
+		stone.body.pos.x = controller.centralBody.pos.x + GameBalance.TargetOrbitRadiusMetres;
+		stone.body.pos.y = controller.centralBody.pos.y;
+		controller.releaseActiveStone();
+		expect(controller.getStoneScoreStatus(stone).kind).toBe(StoneScoreStatusKind.Scored);
+		expect(controller.getStoneScoreStatus(stone).points).toBe(3);
+		stone.markAbsorbed();
+		expect(controller.getStoneScoreStatus(stone).kind).toBe(StoneScoreStatusKind.Absorbed);
+	});
+
 	it("1投後の物理時間は365日基準の10年で、6時間dtの整数倍である", (): void => {
 		expect(Setting.SimulationDurationPerShotSeconds).toBe(10 * 365 * 24 * 60 * 60);
 		expect(Setting.SimulationDurationPerShotSeconds % Setting.PhysicsStepSeconds).toBe(0);

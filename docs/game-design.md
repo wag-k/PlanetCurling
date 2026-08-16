@@ -164,14 +164,21 @@ effectiveOrbitError = radialDistanceError
 
 `New Game`はPhysicsWorld、SimulationRunner、投球数、得点、勝敗、全予測・実軌跡、予測入力キャッシュを消去します。新しい中央天体と未リリースのRed 1投目だけを生成し、ターゲット軌道の追従先も新しい中心天体へ切り替えます。
 
-## ロードマップ
+## Phase G5 UI・演出
 
-- Phase G1: ローカル2人対戦・ターン進行（完了）
-- Phase G2: プレイ調整・ターゲット軌道・得点・勝敗（完了）
-- Phase G3: 軌道予測・実軌跡（完了）
-- Phase G4: 衝突・ノックアウト（完了）
-- Phase G5: UI・演出・バランス調整
-- Phase G6: CPU対戦
-- Phase G7: 簡易オンライン対戦
+Akashic非依存の`MatchController`がsimulation progressとStone score statusを提供し、`GameHudView`は物理・採点を行わず表示へ変換します。HUDはRed/Blue得点、turn、player shot / total shot、10年progress、各Stoneの得点・未投球・吸収状態を示します。値が変わったLabelだけをinvalidateします。
 
-G5以降のCPU/AI、ネット対戦、難易度選択、ランキング、ステージ制、タイブレークはG4のスコープ外です。
+Aiming中のLaunch GuideはactiveStoneの実velocity方向（ドラッグと逆の実発射方向）を示し、長さだけを表示上clampします。物理velocityはclampしません。legacy gravity / velocity vectorは通常表示から除外しました。Prediction / Trails toggleは描画フラグだけを変更します。
+
+Actual collisionだけがpresentation eventとなり、Stone–Stoneは`HIT!`、中央吸収はより大きい`ABSORBED!`と既存SEを一event一回表示・再生します。Prediction仮衝突は演出入口へ渡りません。予測は点線、actual trailは明瞭な実線として区別し、吸収点まで残します。終了時は盤面を背景に勝者・最終得点・Rematchを中央overlay表示し、Rematchは既存`newGame()`を再利用します。
+
+## ロードマップ（G5完了時点）
+
+- G1 Local turn-based match — DONE
+- G2 Target orbit / score / result — DONE
+- G3 Trajectory prediction / trail — DONE
+- G4 Collision — DONE
+- G4.1 Collision chronological fix — DONE
+- G5 UI / effects / game balance — DONE
+- G6 CPU
+- G7 Simple online multiplayer

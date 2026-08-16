@@ -20,13 +20,36 @@ export class CollisionEvent {
 	readonly secondBody: Planet;
 	/** 衝突位置（m）の独立した値です。 */
 	readonly position: Pos;
+	/** 6時間base step開始から衝突までの経過時間（s）です。 */
+	readonly timeFromStepStartSeconds: number;
 
 	/** 衝突通知を生成します。 */
-	constructor(kind: CollisionEventKind, firstBody: Planet, secondBody: Planet, position: Pos) {
+	constructor(kind: CollisionEventKind, firstBody: Planet, secondBody: Planet, position: Pos, timeFromStepStartSeconds: number = 0) {
 		this.kind = kind;
 		this.firstBody = firstBody;
 		this.secondBody = secondBody;
 		this.position = position.clone();
+		this.timeFromStepStartSeconds = timeFromStepStartSeconds;
+	}
+}
+
+/** 仮積分区間から検出した、解決前のtime-of-impact候補です。 */
+export class CollisionCandidate {
+	/** 解決する衝突種別です。 */
+	readonly kind: CollisionEventKind;
+	/** 区間開始を0、終了を1とした最初の接触比率です。 */
+	readonly timeRatio: number;
+	/** swept-circle判定が返した接触情報です。 */
+	readonly contact: SweptCollisionContact;
+	/** 同時刻候補を安定して並べるbody順です。 */
+	readonly stableOrder: number;
+
+	/** 決定的な候補選択に必要な値を保持します。 */
+	constructor(kind: CollisionEventKind, contact: SweptCollisionContact, stableOrder: number) {
+		this.kind = kind;
+		this.timeRatio = contact.timeRatio;
+		this.contact = contact;
+		this.stableOrder = stableOrder;
 	}
 }
 
@@ -276,6 +299,8 @@ export class CollisionSystem {
 	readonly restitution: number;
 	/** 現在物理世界に参加している投石です。 */
 	private readonly stoneBodies: Planet[];
+	/** TOIの浮動小数点差を同時刻とみなす比率epsilonです。 */
+	private static readonly TimeRatioEpsilon: number = 1e-10;
 
 	/** 衝突設定と初期投石一覧を保持します。 */
 	constructor(
@@ -319,6 +344,64 @@ export class CollisionSystem {
 		physicsStepSeconds: number
 	): CollisionEvent[] {
 		return this.resolve(world, startSnapshots, physicsStepSeconds, false);
+	}
+
+	/**
+	 * 同じ仮積分区間にある中央吸収とStone反発を列挙し、最小TOIを返します。
+	 * 同時刻は吸収、Stone反発、登録順の順で決定しPredictionとActualを一致させます。
+	 */
+	findEarliestCandidate(world: PhysicsWorld, startSnapshots: BodyPositionSnapshot[]): CollisionCandidate | undefined {
+		const candidates: CollisionCandidate[] = [];
+		const activeStones: Planet[] = this.stoneBodies.filter((body: Planet): boolean => world.bodies.indexOf(body) >= 0);
+		activeStones.forEach((stone: Planet, stoneIndex: number): void => {
+			const contact: SweptCollisionContact | undefined = this.detectContact(
+				stone, this.centralBody, startSnapshots, this.stoneRadiusMetres, this.centralRadiusMetres
+			);
+			if (contact !== undefined) {
+				candidates.push(new CollisionCandidate(CollisionEventKind.StoneCentralBody, contact, stoneIndex));
+			}
+		});
+		for (let firstIndex: number = 0; firstIndex < activeStones.length; firstIndex += 1) {
+			for (let secondIndex: number = firstIndex + 1; secondIndex < activeStones.length; secondIndex += 1) {
+				const contact: SweptCollisionContact | undefined = this.detectContact(
+					activeStones[firstIndex], activeStones[secondIndex], startSnapshots,
+					this.stoneRadiusMetres, this.stoneRadiusMetres
+				);
+				if (contact !== undefined && this.isApproaching(contact)) {
+					candidates.push(new CollisionCandidate(
+						CollisionEventKind.StoneStone, contact, activeStones.length + firstIndex * activeStones.length + secondIndex
+					));
+				}
+			}
+		}
+		return candidates.sort((first: CollisionCandidate, second: CollisionCandidate): number => {
+			const timeDifference: number = first.timeRatio - second.timeRatio;
+			if (Math.abs(timeDifference) > CollisionSystem.TimeRatioEpsilon) {
+				return timeDifference;
+			}
+			if (first.kind !== second.kind) {
+				return first.kind === CollisionEventKind.StoneCentralBody ? -1 : 1;
+			}
+			return first.stableOrder - second.stableOrder;
+		})[0];
+	}
+
+	/** TOIまで再積分済みの世界へ候補を適用し、base step内の正確な秒時刻を通知します。 */
+	resolveCandidate(world: PhysicsWorld, candidate: CollisionCandidate, timeFromStepStartSeconds: number): CollisionEvent | undefined {
+		const contact: SweptCollisionContact = candidate.contact;
+		if (candidate.kind === CollisionEventKind.StoneCentralBody) {
+			contact.firstBody.pos.x = contact.firstContactPosition.x;
+			contact.firstBody.pos.y = contact.firstContactPosition.y;
+			world.removeBody(contact.firstBody);
+			this.removeStone(contact.firstBody);
+			return new CollisionEvent(candidate.kind, contact.firstBody, contact.secondBody,
+				contact.firstContactPosition, timeFromStepStartSeconds);
+		}
+		const appliedImpulse: boolean = CollisionResolver.resolveStoneCollision(
+			contact, 0, this.stoneRadiusMetres * 2, this.restitution
+		);
+		return appliedImpulse ? new CollisionEvent(candidate.kind, contact.firstBody, contact.secondBody,
+			contact.getMidpoint(), timeFromStepStartSeconds) : undefined;
 	}
 
 	/** clone世界用に同一設定と対応するclone天体を持つ衝突系を生成します。 */
@@ -419,6 +502,13 @@ export class CollisionSystem {
 			(value: BodyPositionSnapshot): boolean => value.body === body
 		)[0];
 		return snapshot === undefined ? body.pos.clone() : snapshot.position;
+	}
+
+	/** 接触法線方向へ近づくStone接触だけをImpulse候補にします。 */
+	private isApproaching(contact: SweptCollisionContact): boolean {
+		const relativeVelocityX: number = contact.secondBody.velocity.x - contact.firstBody.velocity.x;
+		const relativeVelocityY: number = contact.secondBody.velocity.y - contact.firstBody.velocity.y;
+		return relativeVelocityX * contact.normalX + relativeVelocityY * contact.normalY < 0;
 	}
 
 	/** 吸収済み投石を衝突対象一覧から取り除きます。 */

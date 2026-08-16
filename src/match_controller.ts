@@ -36,6 +36,27 @@ export enum CurlingStoneState {
 	Absorbed = "Absorbed"
 }
 
+/** HUDへ渡す未投球・得点・吸収済みの純粋な表示状態です。 */
+export enum StoneScoreStatusKind {
+	Unreleased = "Unreleased",
+	Scored = "Scored",
+	Absorbed = "Absorbed"
+}
+
+/** HUDが物理計算をせずStone状態を描ける読み取り値です。 */
+export class StoneScoreStatus {
+	/** 状態種別です。 */
+	readonly kind: StoneScoreStatusKind;
+	/** リリース済みかつ未吸収の場合の0～3点です。 */
+	readonly points?: number;
+
+	/** 表示状態を生成します。 */
+	constructor(kind: StoneScoreStatusKind, points?: number) {
+		this.kind = kind;
+		this.points = points;
+	}
+}
+
 /**
  * ゲーム上の投球駒と純粋な物理天体を関連付けます。
  * 所有者や投球番号をPlanetへ追加せず、物理層をゲームルールから分離します。
@@ -129,6 +150,13 @@ export class CurlingStone {
 		if (this.released) {
 			this.actualTrajectoryRecorder.recordFinal(this.body);
 		}
+	}
+
+	/** 6時間step内部の衝突位置を、step開始からの秒時刻付きで実軌跡へ追加します。 */
+	recordCollisionPoint(event: CollisionEvent): boolean {
+		return this.released && this.actualTrajectoryRecorder.recordEventPoint(
+			this.body, event.timeFromStepStartSeconds, event.position
+		);
 	}
 }
 
@@ -255,6 +283,25 @@ export class MatchController {
 		return this.confirmedResult;
 	}
 
+	/** 0～10ゲーム年の現在値を0～1へclampしたHUD用simulation進捗です。 */
+	get simulationProgress(): number {
+		return Math.max(0, Math.min(1,
+			this.shotSimulationElapsedSeconds / Setting.SimulationDurationPerShotSeconds
+		));
+	}
+
+	/** 指定Stoneの未投球・0～3点・吸収状態をゲーム層で評価してHUDへ返します。 */
+	getStoneScoreStatus(stone: CurlingStone): StoneScoreStatus {
+		if (!stone.isReleased) {
+			return new StoneScoreStatus(StoneScoreStatusKind.Unreleased);
+		}
+		if (stone.isAbsorbed) {
+			return new StoneScoreStatus(StoneScoreStatusKind.Absorbed);
+		}
+		return new StoneScoreStatus(StoneScoreStatusKind.Scored,
+			this.scoreEvaluator.evaluate(stone.body, this.centralBody).points);
+	}
+
 	/** 未取得の衝突通知を返し、内部キューを空にします。 */
 	consumeCollisionEvents(): CollisionEvent[] {
 		const events: CollisionEvent[] = this.pendingCollisionEvents.slice();
@@ -340,8 +387,8 @@ export class MatchController {
 		const completedSteps: number = this.simulationRunner.advance(
 			acceptedSeconds,
 			(_world, physicsStepSeconds: number, events: CollisionEvent[]): void => {
-				this.recordActualTrajectories(physicsStepSeconds);
 				this.processCollisionEvents(events);
+				this.recordActualTrajectories(physicsStepSeconds);
 			}
 		);
 		const advancedSeconds: number = completedSteps * this.simulationRunner.physicsStepSeconds;
@@ -419,6 +466,11 @@ export class MatchController {
 	/** 衝突通知をゲーム側状態へ反映し、描画用キューへ保存します。 */
 	private processCollisionEvents(events: CollisionEvent[]): void {
 		events.forEach((event: CollisionEvent): void => {
+			this.stones.forEach((stone: CurlingStone): void => {
+				if (stone.body === event.firstBody || stone.body === event.secondBody) {
+					stone.recordCollisionPoint(event);
+				}
+			});
 			if (event.kind === CollisionEventKind.StoneCentralBody) {
 				const absorbedStone: CurlingStone | undefined = this.stones.filter(
 					(stone: CurlingStone): boolean => stone.body === event.firstBody

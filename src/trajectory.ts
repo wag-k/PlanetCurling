@@ -79,6 +79,23 @@ export class TrajectoryRecorder {
 		return true;
 	}
 
+	/**
+	 * 現在のbase step開始から指定秒後の衝突点を追加します。
+	 * recorderの通常sample時計は進めず、6時間内部の方向転換・吸収時刻だけを正確に残します。
+	 */
+	recordEventPoint(body: Planet, timeFromCurrentStepSeconds: number, position?: {x: number; y: number}): boolean {
+		const eventElapsedSeconds: number = this.elapsedSeconds + Math.max(0, timeFromCurrentStepSeconds);
+		const x: number = position === undefined ? body.pos.x : position.x;
+		const y: number = position === undefined ? body.pos.y : position.y;
+		const lastPoint: TrajectoryPoint | undefined = this.recordedPoints[this.recordedPoints.length - 1];
+		if (lastPoint !== undefined && lastPoint.xMetres === x && lastPoint.yMetres === y
+			&& lastPoint.elapsedSeconds === eventElapsedSeconds) {
+			return false;
+		}
+		this.recordedPoints.push(new TrajectoryPoint(x, y, eventElapsedSeconds));
+		return true;
+	}
+
 	/** 呼び出し側から配列を変更できないよう、記録点の浅いコピーを返します。 */
 	getPoints(): TrajectoryPoint[] {
 		return this.recordedPoints.slice();
@@ -160,8 +177,13 @@ export class TrajectoryPredictor {
 				if (activeBodyRemoved) {
 					return;
 				}
+				const activeEvents: CollisionEvent[] = collisionEvents.filter(
+					(event: CollisionEvent): boolean => event.firstBody === clonedActiveBody || event.secondBody === clonedActiveBody
+				);
+				activeEvents.forEach((event: CollisionEvent): void => {
+					recorder.recordEventPoint(clonedActiveBody, event.timeFromStepStartSeconds, event.position);
+				});
 				if (clonedWorld.world.bodies.indexOf(clonedActiveBody) < 0) {
-					recorder.recordFinal(clonedActiveBody);
 					activeBodyRemoved = true;
 					return;
 				}

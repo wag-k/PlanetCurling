@@ -1,11 +1,43 @@
-import {BodyPositionSnapshot, CollisionEvent, CollisionSystem} from "./collision";
+import {BodyPositionSnapshot, CollisionCandidate, CollisionEvent, CollisionSystem} from "./collision";
 import {IPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
+import {Planet} from "./planet";
+
+/** 既存Planet参照を保ったまま巻き戻す、位置・速度・加速度の完全物理snapshotです。 */
+export class PhysicsStateSnapshot {
+	/** snapshot時に世界へ存在した天体順です。 */
+	private readonly bodies: Planet[];
+	/** 各天体のSI物理状態です。 */
+	private readonly values: number[][];
+
+	/** 仮積分前の全天体状態を複製します。 */
+	constructor(world: PhysicsWorld) {
+		this.bodies = world.bodies.slice();
+		this.values = this.bodies.map((body: Planet): number[] => [
+			body.pos.x, body.pos.y, body.velocity.x, body.velocity.y, body.acceleration.x, body.acceleration.y
+		]);
+	}
+
+	/** Planetを置換せず全値とworld順を復元し、Viewやゲーム層の参照を壊しません。 */
+	restore(world: PhysicsWorld): void {
+		world.bodies.splice(0, world.bodies.length, ...this.bodies);
+		this.bodies.forEach((body: Planet, index: number): void => {
+			const value: number[] = this.values[index];
+			body.pos.x = value[0]; body.pos.y = value[1];
+			body.velocity.x = value[2]; body.velocity.y = value[3];
+			body.acceleration.x = value[4]; body.acceleration.y = value[5];
+		});
+	}
+}
 
 /**
  * 可変量のシミュレーション時間をaccumulatorへ貯め、固定dtだけ物理世界を進めます。
  */
 export class SimulationRunner {
+	/** 1base step内で許す衝突数です。連鎖を許しつつhangを防ぎます。 */
+	static readonly MaxCollisionEventsPerPhysicsStep: number = 12;
+	/** zero-time接触後にも時間を前進させる最小内部substep（s）です。 */
+	static readonly CollisionTimeEpsilonSeconds: number = 1e-6;
 	/** 更新対象のAkashic非依存な物理世界です。 */
 	readonly world: PhysicsWorld;
 
@@ -96,20 +128,7 @@ export class SimulationRunner {
 		this.accumulatorSeconds += simulationSeconds;
 		let stepCount: number = 0;
 		while (this.accumulatorSeconds >= this.physicsStepSeconds) {
-			const collisionEvents: CollisionEvent[] = this.collisionSystem === undefined
-				? []
-				: this.collisionSystem.resolveBeforeStep(this.world);
-			const startPositions: BodyPositionSnapshot[] = this.collisionSystem === undefined
-				? []
-				: this.collisionSystem.capturePositions();
-			this.integrator.step(this.world, this.physicsStepSeconds);
-			if (this.collisionSystem !== undefined) {
-				collisionEvents.push(...this.collisionSystem.resolveAfterStep(
-					this.world,
-					startPositions,
-					this.physicsStepSeconds
-				));
-			}
+			const collisionEvents: CollisionEvent[] = this.stepFixedInterval();
 			if (afterStep !== undefined) {
 				afterStep(this.world, this.physicsStepSeconds, collisionEvents);
 			}
@@ -118,5 +137,57 @@ export class SimulationRunner {
 		}
 		this.completedStepCount += stepCount;
 		return stepCount;
+	}
+
+	/**
+	 * 1回の固定base dtを、衝突時だけearliest TOIで内部分割して進めます。
+	 * 仮計算・TOI再計算・残時間のすべてに同じIntegratorと全天体を使うためPredictionとも共通です。
+	 */
+	private stepFixedInterval(): CollisionEvent[] {
+		if (this.collisionSystem === undefined) {
+			this.integrator.step(this.world, this.physicsStepSeconds);
+			return [];
+		}
+		const events: CollisionEvent[] = [];
+		let elapsedSeconds: number = 0;
+		let remainingSeconds: number = this.physicsStepSeconds;
+		let collisionIterations: number = 0;
+		while (remainingSeconds > 0 && collisionIterations < SimulationRunner.MaxCollisionEventsPerPhysicsStep) {
+			collisionIterations += 1;
+			const snapshot: PhysicsStateSnapshot = new PhysicsStateSnapshot(this.world);
+			const startPositions: BodyPositionSnapshot[] = this.collisionSystem.capturePositions();
+			this.integrator.step(this.world, remainingSeconds);
+			const candidate: CollisionCandidate | undefined = this.collisionSystem.findEarliestCandidate(
+				this.world, startPositions
+			);
+			if (candidate === undefined) {
+				remainingSeconds = 0;
+				break;
+			}
+			const timeToImpactSeconds: number = Math.max(0, Math.min(remainingSeconds,
+				remainingSeconds * candidate.timeRatio));
+			snapshot.restore(this.world);
+			if (timeToImpactSeconds > 0) {
+				this.integrator.step(this.world, timeToImpactSeconds);
+			}
+			const eventTime: number = Math.min(this.physicsStepSeconds, elapsedSeconds + timeToImpactSeconds);
+			const event: CollisionEvent | undefined = this.collisionSystem.resolveCandidate(this.world, candidate, eventTime);
+			if (event !== undefined) {
+				events.push(event);
+			}
+			const consumedSeconds: number = Math.max(timeToImpactSeconds,
+				SimulationRunner.CollisionTimeEpsilonSeconds);
+			const safeConsumedSeconds: number = Math.min(remainingSeconds, consumedSeconds);
+			if (safeConsumedSeconds > timeToImpactSeconds) {
+				this.integrator.step(this.world, safeConsumedSeconds - timeToImpactSeconds);
+			}
+			elapsedSeconds += safeConsumedSeconds;
+			remainingSeconds -= safeConsumedSeconds;
+		}
+		// 安全上限後もbase dtを欠落させず、同じIntegratorで有限に完走します。
+		if (remainingSeconds > 0) {
+			this.integrator.step(this.world, remainingSeconds);
+		}
+		return events;
 	}
 }
