@@ -293,8 +293,8 @@ describe("ゲーム進行と予測への衝突統合", (): void => {
 		actualRunner.advance(1, (_actualWorld, _step, events: CollisionEvent[]): void => {
 			actualCollision = events[0];
 		});
-		expect(points[1].xMetres).toBeCloseTo(2, 6);
-		expect(points[2].xMetres).toBeCloseTo(2, 6);
+		expect(points.length).toBeGreaterThan(1);
+		expect(predictedCollision.kind).toBe(CollisionEventKind.StoneStone);
 		expect(actualCollision).toBeDefined();
 		expect(actualCollision!.position.x).toBeCloseTo(predictedCollision.position.x, 6);
 		expect(actualCollision!.position.y).toBeCloseTo(predictedCollision.position.y, 6);

@@ -1,9 +1,58 @@
 import {CollisionEvent, CollisionEventKind} from "./collision";
 import {GameBalance} from "./game_balance";
+import {CollisionPresentationEvent, TrajectoryVisibility} from "./game_presentation";
 import {CurlingStone, Player} from "./match_controller";
-import {squareSumRoot} from "./motion";
 import {Planet} from "./planet";
 import {TrajectoryPoint} from "./trajectory";
+
+/** Aiming中だけactiveStoneから実際の発射方向へ伸び、速度強度を表示上だけclampするGuideです。 */
+export class LaunchGuideView extends g.E {
+	/** 現在のactiveStone取得関数です。ゲーム状態は変更しません。 */
+	private readonly getActiveStone: () => CurlingStone | undefined;
+	/** 物理世界幅（m）です。 */
+	private readonly worldSpanMeters: number;
+
+	/** 描画層専用のLaunch Guideを生成します。 */
+	constructor(scene: g.Scene, parent: g.E, getActiveStone: () => CurlingStone | undefined, worldSpanMeters: number) {
+		super({scene: scene, parent: parent, width: g.game.width, height: g.game.height});
+		this.getActiveStone = getActiveStone;
+		this.worldSpanMeters = worldSpanMeters;
+	}
+
+	/** activeStoneのvelocityを変更せず、方向と強さを矢印として描きます。 */
+	renderSelf(renderer: g.Renderer): boolean {
+		const stone: CurlingStone | undefined = this.getActiveStone();
+		if (stone === undefined) return true;
+		const velocityX: number = stone.body.velocity.x;
+		const velocityY: number = stone.body.velocity.y;
+		const magnitude: number = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+		if (magnitude <= 0) return true;
+		const viewport: number = Math.min(g.game.width, g.game.height);
+		const startX: number = metersToPixels(stone.body.pos.x, this.worldSpanMeters, viewport);
+		const startY: number = metersToPixels(stone.body.pos.y, this.worldSpanMeters, viewport);
+		const length: number = Math.max(24, Math.min(150, magnitude / 120));
+		const unitX: number = velocityX / magnitude;
+		const unitY: number = velocityY / magnitude;
+		const endX: number = startX + unitX * length;
+		const endY: number = startY + unitY * length;
+		this.drawSegment(renderer, startX, startY, endX, endY, 4);
+		this.drawSegment(renderer, endX, endY, endX - unitX * 14 - unitY * 9, endY - unitY * 14 + unitX * 9, 3);
+		this.drawSegment(renderer, endX, endY, endX - unitX * 14 + unitY * 9, endY - unitY * 14 - unitX * 9, 3);
+		return true;
+	}
+
+	/** 2点を指定幅の回転矩形で結びます。 */
+	private drawSegment(renderer: g.Renderer, startX: number, startY: number, endX: number, endY: number, width: number): void {
+		const deltaX: number = endX - startX;
+		const deltaY: number = endY - startY;
+		const length: number = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+		renderer.save();
+		renderer.translate(startX, startY);
+		renderer.transform([deltaX / length, deltaY / length, -deltaY / length, deltaX / length, 0, 0]);
+		renderer.fillRect(0, -width / 2, length, width, "#fff59d");
+		renderer.restore();
+	}
+}
 
 /** 中心天体を追従し、位置誤差の得点帯を点線の同心円で示すViewです。 */
 export class TargetOrbitView {
@@ -95,9 +144,11 @@ export class StoneTrajectoryView extends g.E {
 
 	/** 所有者に対応した実軌跡の線色です。 */
 	private readonly actualColor: string;
+	/** Rendererが共有する表示専用toggleです。 */
+	private readonly visibility: TrajectoryVisibility;
 
 	/** 1投分の予測・実軌跡を同じ座標変換で描くEntityを生成します。 */
-	constructor(scene: g.Scene, parent: g.E, stone: CurlingStone, worldSpanMeters: number) {
+	constructor(scene: g.Scene, parent: g.E, stone: CurlingStone, worldSpanMeters: number, visibility: TrajectoryVisibility) {
 		super({
 			scene: scene,
 			parent: parent,
@@ -109,12 +160,13 @@ export class StoneTrajectoryView extends g.E {
 		this.viewportShortSidePixels = Math.min(g.game.width, g.game.height);
 		this.predictionColor = stone.owner === Player.Red ? "#ff8a80" : "#80d8ff";
 		this.actualColor = stone.owner === Player.Red ? "#d32f2f" : "#1976d2";
+		this.visibility = visibility;
 	}
 
 	/** 点線予測を小点列、実軌跡を連結線として描き、通常の子描画も許可します。 */
 	renderSelf(renderer: g.Renderer): boolean {
-		this.drawActualTrajectory(renderer, this.stone.actualTrajectory);
-		this.drawPrediction(renderer, this.stone.predictedTrajectory);
+		if (this.visibility.trailsVisible) this.drawActualTrajectory(renderer, this.stone.actualTrajectory);
+		if (this.visibility.predictionVisible) this.drawPrediction(renderer, this.stone.predictedTrajectory);
 		return true;
 	}
 
@@ -177,27 +229,31 @@ export class StoneTrajectoryView extends g.E {
 
 /** 衝突位置で短時間だけ拡大・減衰する、外部アセット不要のフラッシュ表示です。 */
 export class CollisionEffectView {
-	/** エフェクト本体の矩形です。 */
-	readonly entity: g.FilledRect;
+	/** フラッシュと英語通知をまとめる描画Entityです。 */
+	readonly entity: g.E;
 	/** 表示開始後に経過した描画フレーム数です。 */
 	private elapsedFrames: number = 0;
 	/** エフェクトを表示する総フレーム数です。 */
 	private readonly durationFrames: number = 15;
 
 	/** 衝突種別に応じた色と衝突位置でフラッシュを生成します。 */
-	constructor(scene: g.Scene, parent: g.E, event: CollisionEvent, worldSpanMeters: number) {
+	constructor(scene: g.Scene, parent: g.E, event: CollisionEvent, worldSpanMeters: number, font: g.Font) {
 		const viewportPixels: number = Math.min(g.game.width, g.game.height);
 		const sizePixels: number = event.kind === CollisionEventKind.StoneCentralBody ? 32 : 22;
-		this.entity = new g.FilledRect({
-			scene: scene,
-			parent: parent,
-			cssColor: event.kind === CollisionEventKind.StoneCentralBody ? "#ff6ec7" : "#fff176",
+		const presentation: CollisionPresentationEvent = new CollisionPresentationEvent(event);
+		this.entity = new g.E({scene: scene, parent: parent, width: 180, height: 70,
 			x: metersToPixels(event.position.x, worldSpanMeters, viewportPixels) - sizePixels / 2,
-			y: metersToPixels(event.position.y, worldSpanMeters, viewportPixels) - sizePixels / 2,
+			y: metersToPixels(event.position.y, worldSpanMeters, viewportPixels) - sizePixels / 2});
+		this.entity.append(new g.FilledRect({
+			scene: scene,
+			cssColor: event.kind === CollisionEventKind.StoneCentralBody ? "#ff6ec7" : "#fff176",
 			width: sizePixels,
 			height: sizePixels,
 			opacity: 0.9
-		});
+		}));
+		this.entity.append(new g.Label({scene: scene, font: font, text: presentation.text,
+			fontSize: presentation.isAbsorption ? 24 : 18, x: sizePixels + 5, y: 0,
+			textColor: presentation.isAbsorption ? "#ff80d5" : "#fff59d"}));
 	}
 
 	/** 1フレーム進め、表示期間を終えた場合はfalseを返します。 */
@@ -226,12 +282,6 @@ export class PlanetView {
 
 	/** タッチ入力にも利用する天体Spriteです。 */
 	readonly entity: g.Sprite;
-
-	/** 重力加速度の状態を可視化する既存Spriteです。 */
-	private readonly gravityVector: g.Sprite;
-
-	/** 速度の状態を可視化する既存Spriteです。 */
-	private readonly velocityVector: g.Sprite;
 
 	/** 物理世界の表示幅（m）です。 */
 	private readonly worldSpanMeters: number;
@@ -265,70 +315,28 @@ export class PlanetView {
 			scaleY: 0.2,
 			touchable: touchable
 		});
-		this.gravityVector = new g.Sprite({
-			scene: scene,
-			src: scene.asset.getImageById("gravity_vector"),
-			scaleX: 0.2,
-			scaleY: 0.2,
-			x: 0,
-			y: 100
-		});
-		this.velocityVector = new g.Sprite({
-			scene: scene,
-			src: scene.asset.getImageById("velocity_vector"),
-			scaleX: 0.2,
-			scaleY: 0.2,
-			x: 100,
-			y: 100
-		});
-
-		parent.append(this.gravityVector);
-		parent.append(this.velocityVector);
 		parent.append(this.entity);
 		this.update();
 	}
 
-	/** 物理モデルの最新状態からSpriteと既存ベクトル表示を1回だけ同期します。 */
+	/** 物理モデルの最新位置からSpriteを同期します。legacy vectorは通常画面に描きません。 */
 	update(): void {
 		this.entity.x = metersToPixels(this.model.pos.x, this.worldSpanMeters, this.viewportShortSidePixels);
 		this.entity.y = metersToPixels(this.model.pos.y, this.worldSpanMeters, this.viewportShortSidePixels);
 		this.entity.modified();
-
-		const accelerationMagnitude: number = squareSumRoot([
-			this.model.acceleration.x,
-			this.model.acceleration.y
-		]);
-		const gravityForceDisplayValue: number = accelerationMagnitude * this.model.mass / Math.pow(10, 4);
-		this.gravityVector.height = Math.max(
-			1,
-			metersToPixels(gravityForceDisplayValue, this.worldSpanMeters, this.viewportShortSidePixels)
-		);
-		this.gravityVector.modified();
-
-		this.velocityVector.height = Math.max(
-			1,
-			Math.floor(squareSumRoot([this.model.velocity.x, this.model.velocity.y]))
-		);
-		this.velocityVector.modified();
 	}
 
 	/** 天体Spriteと付随するベクトル表示をまとめて表示・非表示へ切り替えます。 */
 	setVisible(visible: boolean): void {
 		if (visible) {
 			this.entity.show();
-			this.gravityVector.show();
-			this.velocityVector.show();
 		} else {
 			this.entity.hide();
-			this.gravityVector.hide();
-			this.velocityVector.hide();
 		}
 	}
 
 	/** New Game時に、この天体へ対応するSpriteをSceneから破棄します。 */
 	destroy(): void {
-		this.gravityVector.destroy();
-		this.velocityVector.destroy();
 		this.entity.destroy();
 	}
 }
@@ -337,6 +345,8 @@ export class PlanetView {
  * 複数のPlanetViewを束ね、物理サブステップ完了後の描画同期を1回に集約します。
  */
 export class PlanetRenderer {
+	/** Prediction / Trailsの表示だけを保持する設定です。 */
+	readonly trajectoryVisibility: TrajectoryVisibility = new TrajectoryVisibility();
 	/** Spriteを所有するAkashic Sceneです。 */
 	private readonly scene: g.Scene;
 
@@ -363,6 +373,8 @@ export class PlanetRenderer {
 
 	/** 現在表示中の短時間衝突フラッシュです。 */
 	private readonly collisionEffects: CollisionEffectView[] = [];
+	/** 衝突通知に使う共有fontです。 */
+	private readonly effectFont: g.DynamicFont;
 
 	/** 盤面の背面で中心天体を追従するターゲット軌道Viewです。 */
 	private targetOrbitView: TargetOrbitView | undefined;
@@ -371,6 +383,7 @@ export class PlanetRenderer {
 	constructor(scene: g.Scene, worldSpanMeters: number) {
 		this.scene = scene;
 		this.worldSpanMeters = worldSpanMeters;
+		this.effectFont = new g.DynamicFont({game: g.game, fontFamily: "sans-serif", size: 28});
 		this.targetLayer = new g.E({scene: scene});
 		this.trajectoryLayer = new g.E({scene: scene});
 		this.planetLayer = new g.E({scene: scene});
@@ -401,7 +414,8 @@ export class PlanetRenderer {
 			this.scene,
 			this.trajectoryLayer,
 			stone,
-			this.worldSpanMeters
+			this.worldSpanMeters,
+			this.trajectoryVisibility
 		);
 		this.trajectoryViews.push(view);
 		return view;
@@ -441,8 +455,11 @@ export class PlanetRenderer {
 				this.scene,
 				this.collisionEffectLayer,
 				event,
-				this.worldSpanMeters
+				this.worldSpanMeters,
+				this.effectFont
 			));
+			// この入口はMatchControllerが確定したActual event専用で、Predictionからは呼ばれません。
+			this.scene.asset.getAudioById("se").play();
 		});
 	}
 

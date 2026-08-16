@@ -124,6 +124,16 @@
 			"type": "script",
 			"path": "script/collision.js",
 			"global": true
+		},
+		"game_hud_view": {
+			"type": "script",
+			"path": "script/game_hud_view.js",
+			"global": true
+		},
+		"game_presentation": {
+			"type": "script",
+			"path": "script/game_presentation.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

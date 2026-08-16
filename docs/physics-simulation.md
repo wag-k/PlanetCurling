@@ -139,10 +139,24 @@ clone側のmass、radius、position、velocity、accelerationはすべて独立�
 - 早送り・低速化: `SimulationSecondsPerSecond` 相当のランタイム倍率をSimulation層へ追加する
 - 一時停止: `advance()` に渡すゲーム内時間を0にする
 - 描画補間: accumulatorの割合をView用に使い、物理状態を変更せず補間表示する
-- 複数同時衝突: 反復ソルバーや衝突時刻順のイベントキューへ拡張する
+- 同一TOIの多点拘束: 現在の決定的な逐次解決を、必要なら同時拘束solverへ拡張する
 
 これらは拡張点の説明であり、現時点では実装していません。
 
 ## 数値誤差とdtの限界
 
 数値積分には打ち切り誤差と浮動小数点誤差があります。6時間dtは現時点の初期値であり、近接遭遇、高速運動、質量比の異なるあらゆる軌道条件に十分な精度を保証するものではありません。条件を変更した場合は、エネルギー誤差、軌道の発散、NaN/Infinityの有無を回帰テストまたは診断で確認してください。
+
+## G4.1: chronological collision-aware step
+
+`Setting.PhysicsStepSeconds`は常に6時間のbase fixed dtです。`SimulationRunner`は衝突系がある場合だけ、base step内部で次を反復します。
+
+1. 現在の`PhysicsWorld`についてposition / velocity / accelerationとbody順をsnapshotする。
+2. 選択中の同じIntegratorで残時間を仮積分する。
+3. Stone–Stone / Stone–CentralBodyのswept-circle候補をすべて列挙し、最小TOIを選ぶ。
+4. snapshotを既存`Planet`インスタンスへrestoreし、TOIまで全天体を同じIntegratorで進める。
+5. 反発または吸収を解決し、残時間について反復する。
+
+同時刻epsilon内では中央吸収、Stone反発、登録body順でtie-breakします。Stone接触は接近中だけImpulseを適用し、zero-time接触は1マイクロ秒の安全前進と最大12イベント/base stepで無限反復を防ぎます。上限後も残時間を同じIntegratorで完走するためhangや未消化時間を作りません。
+
+`CollisionEvent.timeFromStepStartSeconds`は0～6時間の秒値です。Actual trailは吸収点とStone衝突点をこの時刻で追加するため、10日samplingの線分に方向転換が埋もれません。`TrajectoryPredictor`もclone世界を同じ`SimulationRunner`へ渡し、専用collision実装を持ちません。

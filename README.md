@@ -177,4 +177,18 @@ return PhysicsIntegratorKind.VelocityVerlet;
 - 投球惑星の質量、発射位置、得点閾値はG2用の暫定値であり、プレイテスト後の調整が必要です。
 - 6時間dtは現在の初期条件向けの既定値で、すべての軌道の精度を保証しません。
 - シミュレーション速度が高いため、1画面更新で多数の固定ステップを実行します。
-- 速度・重力ベクトルの表示は既存の簡易表示で、物理量を厳密な縮尺で描いてはいません。
+
+## Phase G4.1 / G5
+
+6時間の固定base stepは変更せず、衝突候補があるstepだけ内部substepへ分割します。solverは同じIntegratorで残時間を仮積分し、Stone–StoneとStone–CentralBodyの全候補から最小time-of-impactを選び、full physics snapshotへ復元してTOIまで全天体を再積分します。衝突後の残時間も同じNewton重力と選択中Integratorで進み、1step最大12イベントまで連鎖衝突を処理します。PredictionとActualは同じ`SimulationRunner`経路です。
+
+G5では上部HUDにRed/Blue得点、turn、player shot / total shot、Stone別の`0～3` / `ABS` / `-`、10ゲーム年の進捗を表示します。Aiming中は実際の発射方向をLaunch Guideで示し、Prediction / Trailsは表示だけをON/OFFできます。Stone衝突は`HIT!`、太陽吸収は`ABSORBED!`と既存SEで区別し、6投後は盤面と軌跡を残した結果overlayからRematchできます。旧gravity / velocity vectorは通常画面では表示しません。
+
+### バランス値の所在
+
+| 調整値 | 定義 |
+| --- | --- |
+| Stone / Central mass、両collision radius、restitution、target orbit、score bands | `src/game_balance.ts` (`GameBalance`) |
+| launch multiplier、6時間dt、10年simulation、10年prediction | `src/setting.ts` (`Setting`) |
+
+今回、これらの既存値は変更していません。ゲーム内設定画面は設けず、得点は「位置誤差 + 動径速度」の既存ルールを維持します。
