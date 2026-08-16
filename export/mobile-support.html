@@ -1,0 +1,44 @@
+<!-- G5.1 mobile support: akashic-cli-export-html --injectにより毎回再現可能に追加します。 -->
+<style id="planet-curling-mobile-style">
+	html,
+	body {
+		background: #020b14;
+		overscroll-behavior: none;
+	}
+
+	/* Akashicのmagnify対象をnotchとhome indicatorの内側へ収めます。 */
+	#container {
+		top: env(safe-area-inset-top, 0px);
+		right: env(safe-area-inset-right, 0px);
+		bottom: env(safe-area-inset-bottom, 0px);
+		left: env(safe-area-inset-left, 0px);
+		width: auto;
+		height: auto;
+		overscroll-behavior: none;
+		touch-action: none;
+	}
+
+	/* ゲームcanvas上のdragをpage scrollやpull-to-refreshより優先します。 */
+	#container canvas {
+		touch-action: none;
+	}
+
+	/* Canvasへpointer focusが移っても盤面外周へbrowser既定枠を表示しません。 */
+	#container:focus,
+	#container canvas:focus {
+		outline: none;
+	}
+</style>
+<script id="planet-curling-mobile-viewport">
+	(function () {
+		"use strict";
+		/** 既存viewport metaへsafe area利用を追加し、重複metaは生成しません。 */
+		function enableViewportFit() {
+			var viewport = document.querySelector('meta[name="viewport"]');
+			if (viewport) {
+				viewport.setAttribute("content", "width=device-width,initial-scale=1,viewport-fit=cover");
+			}
+		}
+		enableViewportFit();
+	})();
+</script>

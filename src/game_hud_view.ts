@@ -2,59 +2,103 @@ import {formatMatchResult, TrajectoryVisibility} from "./game_presentation";
 import {
 	CurlingStone, MatchController, MatchState, Player, StoneScoreStatus, StoneScoreStatusKind
 } from "./match_controller";
+import {calculateCurrentLayout, LayoutMode, LayoutRect, ResponsiveLayout} from "./responsive_layout";
 import {Setting} from "./setting";
 
-/** Akashic描画だけを担当し、得点・物理判定をMatchControllerへ委譲するG5 HUDです。 */
+/** Akashic描画だけを担当し、得点・物理判定をMatchControllerへ委譲する右サイドHUDです。 */
 export class GameHudView {
 	/** HUD全体の最前面layerです。 */
 	readonly entity: g.E;
-	/** Rematch操作に利用するbuttonです。 */
+	/** Rematch操作に利用する大型buttonです。 */
 	readonly rematchButton: g.FilledRect;
-	/** 表示toggle操作に利用するbuttonです。 */
+	/** Prediction表示toggleに利用する大型buttonです。 */
 	readonly predictionButton: g.FilledRect;
-	/** 表示toggle操作に利用するbuttonです。 */
+	/** Trails表示toggleに利用する大型buttonです。 */
 	readonly trailsButton: g.FilledRect;
 	/** 試合状態の読み取り元です。 */
 	private readonly controller: MatchController;
 	/** 表示専用toggleです。 */
 	private readonly visibility: TrajectoryVisibility;
+	/** 1280×720内のHUD矩形・font・button寸法です。 */
+	private readonly layout: ResponsiveLayout;
 	/** 値が変わった時だけinvalidateするラベル群です。 */
 	private readonly labels: {[key: string]: g.Label} = {};
-	/** 結果overlay背景です。 */
+	/** 盤面中央の結果overlay背景です。 */
 	private readonly resultOverlay: g.FilledRect;
-	/** ターン開始を短く示すoverlayです。 */
+	/** ターン開始を短く示す盤面内overlayです。 */
 	private readonly turnOverlay: g.Label;
 	/** ターンoverlayの残りframeです。 */
 	private turnOverlayFrames: number = 15;
 	/** 最後にoverlayを表示したactiveStoneです。 */
 	private lastActiveStone: CurlingStone | undefined;
 
-	/** controllerの純粋状態を英語UIへ投影します。 */
-	constructor(scene: g.Scene, font: g.Font, controller: MatchController, visibility: TrajectoryVisibility) {
+	/** controllerの純粋状態を、盤面と分離した右HUDへ投影します。 */
+	constructor(
+		scene: g.Scene,
+		font: g.Font,
+		controller: MatchController,
+		visibility: TrajectoryVisibility,
+		layout: ResponsiveLayout
+	) {
 		this.controller = controller;
 		this.visibility = visibility;
-		this.entity = new g.E({scene: scene, width: g.game.width, height: g.game.height});
+		this.layout = layout;
+		this.entity = new g.E({scene: scene, width: layout.logicalWidth, height: layout.logicalHeight});
 		scene.append(this.entity);
-		this.entity.append(new g.FilledRect({scene: scene, cssColor: "#081522", opacity: 0.82,
-			x: 0, y: 0, width: g.game.width, height: 138}));
-		this.addLabel(scene, font, "redScore", 24, 20, 10, "#ff6b6b");
-		this.addLabel(scene, font, "blueScore", 24, g.game.width - 180, 10, "#64b5f6");
-		this.addLabel(scene, font, "turn", 20, 20, 45, "white");
-		this.addLabel(scene, font, "shot", 18, 20, 72, "white");
-		this.addLabel(scene, font, "progress", 17, 300, 45, "#b3e5fc");
-		this.addLabel(scene, font, "progressBar", 18, 300, 72, "#80cbc4");
-		this.addLabel(scene, font, "redStones", 16, 20, 103, "#ff8a80");
-		this.addLabel(scene, font, "blueStones", 16, 300, 103, "#80d8ff");
-		this.addLabel(scene, font, "help", 15, 620, 103, "#cfd8dc");
-		this.predictionButton = this.addButton(scene, font, 790, 18, 180, "predictionToggle");
-		this.trailsButton = this.addButton(scene, font, 980, 18, 160, "trailsToggle");
-		this.resultOverlay = new g.FilledRect({scene: scene, parent: this.entity, cssColor: "#07111d",
-			opacity: 0.9, x: g.game.width / 2 - 250, y: 245, width: 500, height: 230});
-		this.addLabel(scene, font, "result", 38, g.game.width / 2 - 150, 275, "white");
-		this.addLabel(scene, font, "finalScore", 26, g.game.width / 2 - 140, 330, "white");
-		this.rematchButton = this.addButton(scene, font, g.game.width / 2 - 90, 395, 180, "rematch");
-		this.turnOverlay = new g.Label({scene: scene, parent: this.entity, font: font, text: "RED TURN",
-			fontSize: 34, x: g.game.width / 2 - 95, y: 170, textColor: "#ffffff"});
+		this.entity.append(new g.FilledRect({
+			scene: scene,
+			cssColor: "#081522",
+			opacity: 0.94,
+			x: layout.hudRect.x,
+			y: layout.hudRect.y,
+			width: layout.hudRect.width,
+			height: layout.hudRect.height
+		}));
+		this.addLabel(scene, font, "redScore", layout.scoreFontSize,
+			layout.scoreRect.x, layout.scoreRect.y, "#ff6b6b");
+		this.addLabel(scene, font, "blueScore", layout.scoreFontSize,
+			layout.scoreRect.x + layout.scoreRect.width / 2, layout.scoreRect.y, "#64b5f6");
+		this.addLabel(scene, font, "turn", layout.turnFontSize,
+			layout.turnRect.x, layout.turnRect.y, "white");
+		this.addLabel(scene, font, "shot", layout.bodyFontSize,
+			layout.turnRect.x, layout.turnRect.y + 42, "white");
+		this.addLabel(scene, font, "progress", layout.bodyFontSize,
+			layout.progressRect.x, layout.progressRect.y, "#b3e5fc");
+		this.addLabel(scene, font, "progressBar", layout.bodyFontSize,
+			layout.progressRect.x, layout.progressRect.y + 38, "#80cbc4");
+		this.addLabel(scene, font, "redStones", layout.statusFontSize,
+			layout.stoneStatusRect.x, layout.stoneStatusRect.y, "#ff8a80");
+		this.addLabel(scene, font, "blueStones", layout.statusFontSize,
+			layout.stoneStatusRect.x, layout.stoneStatusRect.y + 44, "#80d8ff");
+		this.addLabel(scene, font, "help", 19,
+			layout.stoneStatusRect.x, layout.stoneStatusRect.bottom - 18, "#cfd8dc");
+		this.predictionButton = this.addButton(scene, font, layout.predictionButtonRect, "predictionToggle");
+		this.trailsButton = this.addButton(scene, font, layout.trailsButtonRect, "trailsToggle");
+		this.resultOverlay = new g.FilledRect({
+			scene: scene,
+			parent: this.entity,
+			cssColor: "#07111d",
+			opacity: 0.94,
+			x: layout.resultOverlayRect.x,
+			y: layout.resultOverlayRect.y,
+			width: layout.resultOverlayRect.width,
+			height: layout.resultOverlayRect.height
+		});
+		this.addLabel(scene, font, "result", 42,
+			layout.resultOverlayRect.x + 130, layout.resultOverlayRect.y + 42, "white");
+		this.addLabel(scene, font, "finalScore", 30,
+			layout.resultOverlayRect.x + 105, layout.resultOverlayRect.y + 112, "white");
+		this.rematchButton = this.addButton(scene, font, layout.rematchButtonRect, "rematch");
+		this.turnOverlay = new g.Label({
+			scene: scene,
+			parent: this.entity,
+			font: font,
+			text: "RED TURN",
+			fontSize: 38,
+			x: layout.turnOverlayRect.x,
+			y: layout.turnOverlayRect.y,
+			textColor: "#ffffff"
+		});
 		this.predictionButton.onPointDown.add((): void => this.visibility.togglePrediction());
 		this.trailsButton.onPointDown.add((): void => this.visibility.toggleTrails());
 		this.update();
@@ -64,20 +108,20 @@ export class GameHudView {
 	update(): void {
 		const player: string = this.controller.currentPlayer === Player.Red ? "RED" : "BLUE";
 		this.setText("redScore", "RED  " + this.controller.redScore);
-		this.setText("blueScore", this.controller.blueScore + "  BLUE");
-		this.setText("turn", "Turn: " + player);
+		this.setText("blueScore", "BLUE  " + this.controller.blueScore);
+		this.setText("turn", player + " TURN");
 		this.setText("shot", "Shot " + this.controller.getCurrentPlayerShotNumber() + " / " + this.controller.shotsPerPlayer
 			+ "   Total " + this.controller.getCurrentTotalShotNumber() + " / " + this.controller.maximumTotalShots);
 		const years: number = this.controller.currentShotSimulationElapsedSeconds / Setting.SecondsPerYear;
 		this.setText("progress", this.controller.state === MatchState.Simulating
-			? "Simulation  Year " + years.toFixed(1) + " / 10.0" : "Aim & Release");
-		const filled: number = Math.round(this.controller.simulationProgress * 20);
-		this.setText("progressBar", "[" + this.repeat("|", filled) + this.repeat(".", 20 - filled) + "]");
-		this.setText("redStones", "RED   " + this.formatStones(Player.Red, "R"));
-		this.setText("blueStones", "BLUE  " + this.formatStones(Player.Blue, "B"));
-		this.setText("help", "Orbit score = position + radial speed");
-		this.setText("predictionToggle", "Prediction: " + (this.visibility.predictionVisible ? "ON" : "OFF"));
-		this.setText("trailsToggle", "Trails: " + (this.visibility.trailsVisible ? "ON" : "OFF"));
+			? "Year " + years.toFixed(1) + " / 10.0" : "Aim & Release");
+		const filled: number = Math.round(this.controller.simulationProgress * 16);
+		this.setText("progressBar", "[" + this.repeat("|", filled) + this.repeat(".", 16 - filled) + "]");
+		this.setText("redStones", this.formatStones(Player.Red, "R"));
+		this.setText("blueStones", this.formatStones(Player.Blue, "B"));
+		this.setText("help", "Score: orbit + radial speed");
+		this.setText("predictionToggle", "Prediction " + (this.visibility.predictionVisible ? "ON" : "OFF"));
+		this.setText("trailsToggle", "Trails " + (this.visibility.trailsVisible ? "ON" : "OFF"));
 		this.updateResultOverlay();
 		this.updateTurnOverlay(player);
 	}
@@ -106,13 +150,19 @@ export class GameHudView {
 	private updateResultOverlay(): void {
 		const visible: boolean = this.controller.state === MatchState.MatchFinished && this.controller.result !== undefined;
 		if (visible) {
-			this.resultOverlay.show(); this.rematchButton.show();
-			this.labels.result.show(); this.labels.finalScore.show(); this.labels.rematch.show();
+			this.resultOverlay.show();
+			this.rematchButton.show();
+			this.labels.result.show();
+			this.labels.finalScore.show();
+			this.labels.rematch.show();
 			this.setText("result", formatMatchResult(this.controller.result!));
 			this.setText("finalScore", "RED " + this.controller.redScore + " - " + this.controller.blueScore + " BLUE");
 		} else {
-			this.resultOverlay.hide(); this.rematchButton.hide();
-			this.labels.result.hide(); this.labels.finalScore.hide(); this.labels.rematch.hide();
+			this.resultOverlay.hide();
+			this.rematchButton.hide();
+			this.labels.result.hide();
+			this.labels.finalScore.hide();
+			this.labels.rematch.hide();
 		}
 	}
 
@@ -129,21 +179,40 @@ export class GameHudView {
 			this.turnOverlay.opacity = this.turnOverlayFrames / 15;
 			this.turnOverlay.modified();
 			this.turnOverlayFrames -= 1;
-		} else this.turnOverlay.hide();
+		} else {
+			this.turnOverlay.hide();
+		}
 	}
 
 	/** ラベルを生成して名前で保持します。 */
 	private addLabel(scene: g.Scene, font: g.Font, key: string, size: number, x: number, y: number, color: string): void {
-		const label: g.Label = new g.Label({scene: scene, parent: this.entity, font: font, text: "", fontSize: size,
-			x: x, y: y, textColor: color});
+		const label: g.Label = new g.Label({
+			scene: scene,
+			parent: this.entity,
+			font: font,
+			text: "",
+			fontSize: size,
+			x: x,
+			y: y,
+			textColor: color
+		});
 		this.labels[key] = label;
 	}
 
-	/** touchable背景と対応ラベルを生成します。 */
-	private addButton(scene: g.Scene, font: g.Font, x: number, y: number, width: number, labelKey: string): g.FilledRect {
-		const button: g.FilledRect = new g.FilledRect({scene: scene, parent: this.entity, cssColor: "#26384d",
-			x: x, y: y, width: width, height: 40, touchable: true});
-		this.addLabel(scene, font, labelKey, 16, x + 10, y + 10, "white");
+	/** 指定矩形全体がtouchableな背景と対応ラベルを生成します。 */
+	private addButton(scene: g.Scene, font: g.Font, rect: LayoutRect, labelKey: string): g.FilledRect {
+		const button: g.FilledRect = new g.FilledRect({
+			scene: scene,
+			parent: this.entity,
+			cssColor: "#26384d",
+			x: rect.x,
+			y: rect.y,
+			width: rect.width,
+			height: rect.height,
+			touchable: true
+		});
+		this.addLabel(scene, font, labelKey, this.layout.buttonFontSize,
+			rect.x + 14, rect.y + (rect.height - this.layout.buttonFontSize) / 2, "white");
 		return button;
 	}
 
@@ -159,5 +228,97 @@ export class GameHudView {
 		let result: string = "";
 		for (let index: number = 0; index < count; index += 1) result += value;
 		return result;
+	}
+}
+
+/** Device orientationを監視し、phone portraitでは入力を覆い、tablet portraitでは案内だけ表示します。 */
+export class OrientationNoticeView {
+	/** Smartphone portraitで全入力を受け止める背景です。 */
+	private readonly blockingOverlay: g.FilledRect;
+	/** Smartphone portrait向けの主案内です。 */
+	private readonly blockingTitle: g.Label;
+	/** Smartphone portrait向けの補助案内です。 */
+	private readonly blockingSubtitle: g.Label;
+	/** Tablet portraitで操作を残したまま表示するbannerです。 */
+	private readonly tabletBanner: g.FilledRect;
+	/** Tablet portrait向けの案内文です。 */
+	private readonly tabletLabel: g.Label;
+
+	/** 論理解像度上にorientation案内を生成します。 */
+	constructor(scene: g.Scene, font: g.Font, layout: ResponsiveLayout) {
+		this.blockingOverlay = new g.FilledRect({
+			scene: scene,
+			cssColor: "#040b12",
+			opacity: 0.96,
+			x: 0,
+			y: 0,
+			width: layout.logicalWidth,
+			height: layout.logicalHeight,
+			touchable: true
+		});
+		this.blockingTitle = new g.Label({
+			scene: scene,
+			font: font,
+			text: "Please rotate your device",
+			fontSize: 42,
+			x: 360,
+			y: 285,
+			textColor: "white"
+		});
+		this.blockingSubtitle = new g.Label({
+			scene: scene,
+			font: font,
+			text: "Landscape mode recommended",
+			fontSize: 28,
+			x: 425,
+			y: 345,
+			textColor: "#b3e5fc"
+		});
+		this.tabletBanner = new g.FilledRect({
+			scene: scene,
+			cssColor: "#10283c",
+			opacity: 0.92,
+			x: layout.hudRect.x,
+			y: layout.logicalHeight - 82,
+			width: layout.hudRect.width,
+			height: 82
+		});
+		this.tabletLabel = new g.Label({
+			scene: scene,
+			font: font,
+			text: "Landscape recommended",
+			fontSize: 23,
+			x: layout.hudRect.x + 38,
+			y: layout.logicalHeight - 54,
+			textColor: "white"
+		});
+		scene.append(this.blockingOverlay);
+		scene.append(this.blockingTitle);
+		scene.append(this.blockingSubtitle);
+		scene.append(this.tabletBanner);
+		scene.append(this.tabletLabel);
+		this.update();
+	}
+
+	/** 現在のbrowser viewportを読み、向き変更に応じて案内を表示・非表示にします。 */
+	update(): void {
+		const layout: ResponsiveLayout = calculateCurrentLayout(g.game.width, g.game.height);
+		const portrait: boolean = layout.mode === LayoutMode.Portrait;
+		if (portrait && layout.shouldBlockForPortrait) {
+			this.blockingOverlay.show();
+			this.blockingTitle.show();
+			this.blockingSubtitle.show();
+		} else {
+			this.blockingOverlay.hide();
+			this.blockingTitle.hide();
+			this.blockingSubtitle.hide();
+		}
+		if (portrait && !layout.shouldBlockForPortrait) {
+			this.tabletBanner.show();
+			this.tabletLabel.show();
+		} else {
+			this.tabletBanner.hide();
+			this.tabletLabel.hide();
+		}
 	}
 }

@@ -1,9 +1,10 @@
 import {GameBalance} from "./game_balance";
-import {GameHudView} from "./game_hud_view";
+import {GameHudView, OrientationNoticeView} from "./game_hud_view";
 import {CurlingStone, MatchController, MatchState, Player} from "./match_controller";
 import {createPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
 import {LaunchGuideView, PlanetRenderer, PlanetView} from "./rendering";
+import {calculateCurrentLayout, ResponsiveLayout} from "./responsive_layout";
 import {Setting} from "./setting";
 import {SimulationRunner} from "./simulation_runner";
 import {Universe} from "./universe";
@@ -14,24 +15,27 @@ function main(_param: g.GameMainParameterObject): void {
 	const font: g.DynamicFont = new g.DynamicFont({game: g.game, fontFamily: "sans-serif", size: 40});
 
 	scene.onLoad.add((): void => {
+		const layout: ResponsiveLayout = calculateCurrentLayout(g.game.width, g.game.height);
 		const runner: SimulationRunner = new SimulationRunner(new PhysicsWorld(),
 			createPhysicsIntegrator(Setting.IntegratorKind), Setting.PhysicsStepSeconds);
 		const matchController: MatchController = new MatchController(runner);
-		const renderer: PlanetRenderer = new PlanetRenderer(scene, GameBalance.WorldSpanMeters);
+		const renderer: PlanetRenderer = new PlanetRenderer(scene, GameBalance.WorldSpanMeters, layout);
 		const universe: Universe = new Universe(matchController, renderer, GameBalance.WorldSpanMeters, g.game.width);
 		const guideLayer: g.E = new g.E({scene: scene});
 		scene.append(guideLayer);
 		const launchGuide: LaunchGuideView = new LaunchGuideView(scene, guideLayer,
 			(): CurlingStone | undefined => matchController.state === MatchState.Aiming ? matchController.activeStone : undefined,
-			GameBalance.WorldSpanMeters);
-		const hud: GameHudView = new GameHudView(scene, font, matchController, renderer.trajectoryVisibility);
+			GameBalance.WorldSpanMeters, layout);
+		const hud: GameHudView = new GameHudView(scene, font, matchController, renderer.trajectoryVisibility, layout);
+		const orientationNotice: OrientationNoticeView = new OrientationNoticeView(scene, font, layout);
 
 		/** activeStoneだけへドラッグ入力とreleaseを接続します。 */
 		function bindStoneInput(stone: CurlingStone, view: PlanetView): void {
-			view.entity.onPointMove.add((event: g.PointMoveEvent): void => {
+			if (view.inputEntity === undefined) return;
+			view.inputEntity.onPointMove.add((event: g.PointMoveEvent): void => {
 				if (matchController.activeStone === stone) universe.playerDrag(event.startDelta.x, event.startDelta.y);
 			});
-			view.entity.onPointUp.add((): void => {
+			view.inputEntity.onPointUp.add((): void => {
 				if (matchController.activeStone === stone) universe.releaseActiveStone();
 			});
 		}
@@ -42,11 +46,15 @@ function main(_param: g.GameMainParameterObject): void {
 				const existing: PlanetView | undefined = renderer.findView(stone.body);
 				if (existing !== undefined) {
 					existing.setVisible(!stone.isAbsorbed);
+					existing.setInputActive(matchController.state === MatchState.Aiming
+						&& matchController.activeStone === stone && !stone.isAbsorbed);
 					return;
 				}
 				renderer.addStoneTrajectory(stone);
 				const view: PlanetView = renderer.addPlanet(stone.body, stone.owner === Player.Red ? "planet1" : "planet2", true);
 				view.setVisible(!stone.isAbsorbed);
+				view.setInputActive(matchController.state === MatchState.Aiming
+					&& matchController.activeStone === stone && !stone.isAbsorbed);
 				bindStoneInput(stone, view);
 			});
 		}
@@ -71,6 +79,7 @@ function main(_param: g.GameMainParameterObject): void {
 			synchronizeStoneViews();
 			launchGuide.modified();
 			hud.update();
+			orientationNotice.update();
 			scene.modified();
 		});
 	});

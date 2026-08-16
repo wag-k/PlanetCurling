@@ -134,6 +134,11 @@
 			"type": "script",
 			"path": "script/game_presentation.js",
 			"global": true
+		},
+		"responsive_layout": {
+			"type": "script",
+			"path": "script/responsive_layout.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

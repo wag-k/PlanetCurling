@@ -3,6 +3,7 @@ import {GameBalance} from "./game_balance";
 import {CollisionPresentationEvent, TrajectoryVisibility} from "./game_presentation";
 import {CurlingStone, Player} from "./match_controller";
 import {Planet} from "./planet";
+import {LayoutRect, ResponsiveLayout} from "./responsive_layout";
 import {TrajectoryPoint} from "./trajectory";
 
 /** Aiming中だけactiveStoneから実際の発射方向へ伸び、速度強度を表示上だけclampするGuideです。 */
@@ -11,12 +12,21 @@ export class LaunchGuideView extends g.E {
 	private readonly getActiveStone: () => CurlingStone | undefined;
 	/** 物理世界幅（m）です。 */
 	private readonly worldSpanMeters: number;
+	/** Mobile向けのGuide長・太さと盤面矩形です。 */
+	private readonly layout: ResponsiveLayout;
 
 	/** 描画層専用のLaunch Guideを生成します。 */
-	constructor(scene: g.Scene, parent: g.E, getActiveStone: () => CurlingStone | undefined, worldSpanMeters: number) {
-		super({scene: scene, parent: parent, width: g.game.width, height: g.game.height});
+	constructor(
+		scene: g.Scene,
+		parent: g.E,
+		getActiveStone: () => CurlingStone | undefined,
+		worldSpanMeters: number,
+		layout: ResponsiveLayout
+	) {
+		super({scene: scene, parent: parent, width: layout.logicalWidth, height: layout.logicalHeight});
 		this.getActiveStone = getActiveStone;
 		this.worldSpanMeters = worldSpanMeters;
+		this.layout = layout;
 	}
 
 	/** activeStoneのvelocityを変更せず、方向と強さを矢印として描きます。 */
@@ -27,17 +37,28 @@ export class LaunchGuideView extends g.E {
 		const velocityY: number = stone.body.velocity.y;
 		const magnitude: number = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
 		if (magnitude <= 0) return true;
-		const viewport: number = Math.min(g.game.width, g.game.height);
-		const startX: number = metersToPixels(stone.body.pos.x, this.worldSpanMeters, viewport);
-		const startY: number = metersToPixels(stone.body.pos.y, this.worldSpanMeters, viewport);
-		const length: number = Math.max(24, Math.min(150, magnitude / 120));
+		const viewport: number = this.layout.boardRect.width;
 		const unitX: number = velocityX / magnitude;
 		const unitY: number = velocityY / magnitude;
+		const stoneX: number = this.layout.boardRect.x
+			+ metersToPixels(stone.body.pos.x, this.worldSpanMeters, viewport);
+		const stoneY: number = this.layout.boardRect.y
+			+ metersToPixels(stone.body.pos.y, this.worldSpanMeters, viewport);
+		const startX: number = stoneX + unitX * this.layout.launchGuideStartOffset;
+		const startY: number = stoneY + unitY * this.layout.launchGuideStartOffset;
+		const length: number = Math.max(
+			this.layout.launchGuideMinimumLength,
+			Math.min(this.layout.launchGuideMaximumLength, magnitude / 120)
+		);
 		const endX: number = startX + unitX * length;
 		const endY: number = startY + unitY * length;
-		this.drawSegment(renderer, startX, startY, endX, endY, 4);
-		this.drawSegment(renderer, endX, endY, endX - unitX * 14 - unitY * 9, endY - unitY * 14 + unitX * 9, 3);
-		this.drawSegment(renderer, endX, endY, endX - unitX * 14 + unitY * 9, endY - unitY * 14 - unitX * 9, 3);
+		this.drawSegment(renderer, startX, startY, endX, endY, this.layout.launchGuideWidth);
+		this.drawSegment(renderer, endX, endY, endX - unitX * 18 - unitY * 12,
+			endY - unitY * 18 + unitX * 12, this.layout.launchGuideWidth - 1);
+		this.drawSegment(renderer, endX, endY, endX - unitX * 18 + unitY * 12,
+			endY - unitY * 18 - unitX * 12, this.layout.launchGuideWidth - 1);
+		const markerSize: number = this.layout.launchGuideEndpointSize;
+		renderer.fillRect(endX - markerSize / 2, endY - markerSize / 2, markerSize, markerSize, "#fff59d");
 		return true;
 	}
 
@@ -68,11 +89,21 @@ export class TargetOrbitView {
 	/** 物理世界の表示幅に対応する画面短辺（px）です。 */
 	private readonly viewportShortSidePixels: number;
 
+	/** Target Orbitのmobile向けdot補正を持つレイアウトです。 */
+	private readonly layout: ResponsiveLayout;
+
 	/** 位置誤差だけを示す同心円ガイドを生成します。 */
-	constructor(scene: g.Scene, parent: g.E, centralBody: Planet, worldSpanMeters: number) {
+	constructor(
+		scene: g.Scene,
+		parent: g.E,
+		centralBody: Planet,
+		worldSpanMeters: number,
+		layout: ResponsiveLayout
+	) {
 		this.currentCentralBody = centralBody;
 		this.worldSpanMeters = worldSpanMeters;
-		this.viewportShortSidePixels = Math.min(g.game.width, g.game.height);
+		this.layout = layout;
+		this.viewportShortSidePixels = layout.boardRect.width;
 		this.entity = new g.E({scene: scene});
 		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.OnePointOrbitErrorMetres, "#26384d", 2);
 		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.OnePointOrbitErrorMetres, "#26384d", 2);
@@ -97,18 +128,19 @@ export class TargetOrbitView {
 			this.currentCentralBody.pos.x,
 			this.worldSpanMeters,
 			this.viewportShortSidePixels
-		);
+		) + this.layout.boardRect.x;
 		this.entity.y = metersToPixels(
 			this.currentCentralBody.pos.y,
 			this.worldSpanMeters,
 			this.viewportShortSidePixels
-		);
+		) + this.layout.boardRect.y;
 		this.entity.modified();
 	}
 
 	/** 円周上へ小さなFilledRectを並べ、外部描画ライブラリなしの点線リングを追加します。 */
 	private addRing(scene: g.Scene, radiusMetres: number, cssColor: string, dotSizePixels: number): void {
-		const segmentCount: number = 64;
+		const segmentCount: number = 72;
+		const adjustedDotSize: number = dotSizePixels + this.layout.targetOrbitDotBoost;
 		const radiusPixels: number = metersToPixels(
 			radiusMetres,
 			this.worldSpanMeters,
@@ -119,10 +151,10 @@ export class TargetOrbitView {
 			this.entity.append(new g.FilledRect({
 				scene: scene,
 				cssColor: cssColor,
-				x: Math.cos(angle) * radiusPixels - dotSizePixels / 2,
-				y: Math.sin(angle) * radiusPixels - dotSizePixels / 2,
-				width: dotSizePixels,
-				height: dotSizePixels
+				x: Math.cos(angle) * radiusPixels - adjustedDotSize / 2,
+				y: Math.sin(angle) * radiusPixels - adjustedDotSize / 2,
+				width: adjustedDotSize,
+				height: adjustedDotSize
 			}));
 		}
 	}
@@ -146,21 +178,31 @@ export class StoneTrajectoryView extends g.E {
 	private readonly actualColor: string;
 	/** Rendererが共有する表示専用toggleです。 */
 	private readonly visibility: TrajectoryVisibility;
+	/** Prediction / Trailのmobile向け描画寸法です。 */
+	private readonly layout: ResponsiveLayout;
 
 	/** 1投分の予測・実軌跡を同じ座標変換で描くEntityを生成します。 */
-	constructor(scene: g.Scene, parent: g.E, stone: CurlingStone, worldSpanMeters: number, visibility: TrajectoryVisibility) {
+	constructor(
+		scene: g.Scene,
+		parent: g.E,
+		stone: CurlingStone,
+		worldSpanMeters: number,
+		visibility: TrajectoryVisibility,
+		layout: ResponsiveLayout
+	) {
 		super({
 			scene: scene,
 			parent: parent,
-			width: g.game.width,
-			height: g.game.height
+			width: layout.logicalWidth,
+			height: layout.logicalHeight
 		});
 		this.stone = stone;
 		this.worldSpanMeters = worldSpanMeters;
-		this.viewportShortSidePixels = Math.min(g.game.width, g.game.height);
+		this.viewportShortSidePixels = layout.boardRect.width;
 		this.predictionColor = stone.owner === Player.Red ? "#ff8a80" : "#80d8ff";
 		this.actualColor = stone.owner === Player.Red ? "#d32f2f" : "#1976d2";
 		this.visibility = visibility;
+		this.layout = layout;
 	}
 
 	/** 点線予測を小点列、実軌跡を連結線として描き、通常の子描画も許可します。 */
@@ -176,31 +218,34 @@ export class StoneTrajectoryView extends g.E {
 			if (index % 2 !== 0) {
 				return;
 			}
-			const x: number = metersToPixels(point.xMetres, this.worldSpanMeters, this.viewportShortSidePixels);
-			const y: number = metersToPixels(point.yMetres, this.worldSpanMeters, this.viewportShortSidePixels);
-			renderer.fillRect(x - 1, y - 1, 3, 3, this.predictionColor);
+			const x: number = this.layout.boardRect.x
+				+ metersToPixels(point.xMetres, this.worldSpanMeters, this.viewportShortSidePixels);
+			const y: number = this.layout.boardRect.y
+				+ metersToPixels(point.yMetres, this.worldSpanMeters, this.viewportShortSidePixels);
+			const size: number = this.layout.predictionDotSize;
+			renderer.fillRect(x - size / 2, y - size / 2, size, size, this.predictionColor);
 		});
 	}
 
 	/** 実軌跡の隣接sample点を2px幅の線分で接続します。 */
 	private drawActualTrajectory(renderer: g.Renderer, points: TrajectoryPoint[]): void {
 		for (let index: number = 1; index < points.length; index += 1) {
-			const previousX: number = metersToPixels(
+			const previousX: number = this.layout.boardRect.x + metersToPixels(
 				points[index - 1].xMetres,
 				this.worldSpanMeters,
 				this.viewportShortSidePixels
 			);
-			const previousY: number = metersToPixels(
+			const previousY: number = this.layout.boardRect.y + metersToPixels(
 				points[index - 1].yMetres,
 				this.worldSpanMeters,
 				this.viewportShortSidePixels
 			);
-			const currentX: number = metersToPixels(
+			const currentX: number = this.layout.boardRect.x + metersToPixels(
 				points[index].xMetres,
 				this.worldSpanMeters,
 				this.viewportShortSidePixels
 			);
-			const currentY: number = metersToPixels(
+			const currentY: number = this.layout.boardRect.y + metersToPixels(
 				points[index].yMetres,
 				this.worldSpanMeters,
 				this.viewportShortSidePixels
@@ -222,7 +267,7 @@ export class StoneTrajectoryView extends g.E {
 		renderer.save();
 		renderer.translate(startX, startY);
 		renderer.transform([cosine, sine, -sine, cosine, 0, 0]);
-		renderer.fillRect(0, -1, length, 2, this.actualColor);
+		renderer.fillRect(0, -this.layout.trailWidth / 2, length, this.layout.trailWidth, this.actualColor);
 		renderer.restore();
 	}
 }
@@ -237,13 +282,20 @@ export class CollisionEffectView {
 	private readonly durationFrames: number = 15;
 
 	/** 衝突種別に応じた色と衝突位置でフラッシュを生成します。 */
-	constructor(scene: g.Scene, parent: g.E, event: CollisionEvent, worldSpanMeters: number, font: g.Font) {
-		const viewportPixels: number = Math.min(g.game.width, g.game.height);
+	constructor(
+		scene: g.Scene,
+		parent: g.E,
+		event: CollisionEvent,
+		worldSpanMeters: number,
+		font: g.Font,
+		layout: ResponsiveLayout
+	) {
+		const viewportPixels: number = layout.boardRect.width;
 		const sizePixels: number = event.kind === CollisionEventKind.StoneCentralBody ? 32 : 22;
 		const presentation: CollisionPresentationEvent = new CollisionPresentationEvent(event);
 		this.entity = new g.E({scene: scene, parent: parent, width: 180, height: 70,
-			x: metersToPixels(event.position.x, worldSpanMeters, viewportPixels) - sizePixels / 2,
-			y: metersToPixels(event.position.y, worldSpanMeters, viewportPixels) - sizePixels / 2});
+			x: layout.boardRect.x + metersToPixels(event.position.x, worldSpanMeters, viewportPixels) - sizePixels / 2,
+			y: layout.boardRect.y + metersToPixels(event.position.y, worldSpanMeters, viewportPixels) - sizePixels / 2});
 		this.entity.append(new g.FilledRect({
 			scene: scene,
 			cssColor: event.kind === CollisionEventKind.StoneCentralBody ? "#ff6ec7" : "#fff176",
@@ -280,8 +332,11 @@ export class PlanetView {
 	/** 表示元となる純粋な物理モデルです。 */
 	readonly model: Planet;
 
-	/** タッチ入力にも利用する天体Spriteです。 */
+	/** 見た目だけを担当し、入力判定サイズへ影響しない天体Spriteです。 */
 	readonly entity: g.Sprite;
+
+	/** Stone用にだけ生成する、見た目と独立した透明タッチ領域です。 */
+	readonly inputEntity: g.FilledRect | undefined;
 
 	/** 物理世界の表示幅（m）です。 */
 	private readonly worldSpanMeters: number;
@@ -289,13 +344,19 @@ export class PlanetView {
 	/** 物理世界の表示幅に対応する画面短辺（px）です。 */
 	private readonly viewportShortSidePixels: number;
 
+	/** 盤面矩形とactiveStoneタッチ寸法です。 */
+	private readonly layout: ResponsiveLayout;
+
+	/** 描画対象自体が表示中かを保持します。 */
+	private visible: boolean = true;
+
 	/**
 	 * 天体Viewを生成します。
 	 * @param scene Spriteを配置するAkashic Scene
 	 * @param model 表示対象の物理モデル
 	 * @param imageAsset 天体画像
 	 * @param worldSpanMeters 画面短辺に対応する物理世界の長さ（m）
-	 * @param touchable 入力対象にするか
+	 * @param interactiveStone 大型透明touch targetを生成するStoneか
 	 */
 	constructor(
 		scene: g.Scene,
@@ -303,40 +364,77 @@ export class PlanetView {
 		model: Planet,
 		imageAsset: g.ImageAsset,
 		worldSpanMeters: number,
-		touchable: boolean
+		interactiveStone: boolean,
+		layout: ResponsiveLayout
 	) {
 		this.model = model;
 		this.worldSpanMeters = worldSpanMeters;
-		this.viewportShortSidePixels = Math.min(g.game.width, g.game.height);
+		this.layout = layout;
+		this.viewportShortSidePixels = layout.boardRect.width;
 		this.entity = new g.Sprite({
 			scene: scene,
 			src: imageAsset,
 			scaleX: 0.2,
 			scaleY: 0.2,
-			touchable: touchable
+			touchable: false
 		});
 		parent.append(this.entity);
+		if (interactiveStone) {
+			this.inputEntity = new g.FilledRect({
+				scene: scene,
+				parent: parent,
+				cssColor: "#000000",
+				opacity: 0,
+				width: layout.stoneTouchTargetSize,
+				height: layout.stoneTouchTargetSize,
+				touchable: true
+			});
+			this.inputEntity.hide();
+		}
 		this.update();
 	}
 
 	/** 物理モデルの最新位置からSpriteを同期します。legacy vectorは通常画面に描きません。 */
 	update(): void {
-		this.entity.x = metersToPixels(this.model.pos.x, this.worldSpanMeters, this.viewportShortSidePixels);
-		this.entity.y = metersToPixels(this.model.pos.y, this.worldSpanMeters, this.viewportShortSidePixels);
+		this.entity.x = this.layout.boardRect.x
+			+ metersToPixels(this.model.pos.x, this.worldSpanMeters, this.viewportShortSidePixels);
+		this.entity.y = this.layout.boardRect.y
+			+ metersToPixels(this.model.pos.y, this.worldSpanMeters, this.viewportShortSidePixels);
 		this.entity.modified();
+		if (this.inputEntity !== undefined) {
+			const visualCenterX: number = this.entity.x + this.entity.width * this.entity.scaleX / 2;
+			const visualCenterY: number = this.entity.y + this.entity.height * this.entity.scaleY / 2;
+			const touchRect: LayoutRect = this.layout.calculateStoneTouchTarget(visualCenterX, visualCenterY);
+			this.inputEntity.x = touchRect.x;
+			this.inputEntity.y = touchRect.y;
+			this.inputEntity.modified();
+		}
 	}
 
 	/** 天体Spriteと付随するベクトル表示をまとめて表示・非表示へ切り替えます。 */
 	setVisible(visible: boolean): void {
+		this.visible = visible;
 		if (visible) {
 			this.entity.show();
 		} else {
 			this.entity.hide();
+			if (this.inputEntity !== undefined) this.inputEntity.hide();
+		}
+	}
+
+	/** Aiming中のactiveStoneだけ大型透明touch targetを有効化します。 */
+	setInputActive(active: boolean): void {
+		if (this.inputEntity === undefined) return;
+		if (active && this.visible) {
+			this.inputEntity.show();
+		} else {
+			this.inputEntity.hide();
 		}
 	}
 
 	/** New Game時に、この天体へ対応するSpriteをSceneから破棄します。 */
 	destroy(): void {
+		if (this.inputEntity !== undefined) this.inputEntity.destroy();
 		this.entity.destroy();
 	}
 }
@@ -352,6 +450,9 @@ export class PlanetRenderer {
 
 	/** 画面短辺に表示する物理世界の長さ（m）です。 */
 	private readonly worldSpanMeters: number;
+
+	/** 盤面・入力・mobile描画寸法を一元管理するレイアウトです。 */
+	private readonly layout: ResponsiveLayout;
 
 	/** 登録済みの天体Viewです。 */
 	private readonly views: PlanetView[] = [];
@@ -380,9 +481,10 @@ export class PlanetRenderer {
 	private targetOrbitView: TargetOrbitView | undefined;
 
 	/** 描画同期先を生成します。 */
-	constructor(scene: g.Scene, worldSpanMeters: number) {
+	constructor(scene: g.Scene, worldSpanMeters: number, layout: ResponsiveLayout) {
 		this.scene = scene;
 		this.worldSpanMeters = worldSpanMeters;
+		this.layout = layout;
 		this.effectFont = new g.DynamicFont({game: g.game, fontFamily: "sans-serif", size: 28});
 		this.targetLayer = new g.E({scene: scene});
 		this.trajectoryLayer = new g.E({scene: scene});
@@ -395,14 +497,15 @@ export class PlanetRenderer {
 	}
 
 	/** 物理モデルに対応するViewを生成して返します。 */
-	addPlanet(model: Planet, imageAssetId: string, touchable: boolean = false): PlanetView {
+	addPlanet(model: Planet, imageAssetId: string, interactiveStone: boolean = false): PlanetView {
 		const view: PlanetView = new PlanetView(
 			this.scene,
 			this.planetLayer,
 			model,
 			this.scene.asset.getImageById(imageAssetId),
 			this.worldSpanMeters,
-			touchable
+			interactiveStone,
+			this.layout
 		);
 		this.views.push(view);
 		return view;
@@ -415,7 +518,8 @@ export class PlanetRenderer {
 			this.trajectoryLayer,
 			stone,
 			this.worldSpanMeters,
-			this.trajectoryVisibility
+			this.trajectoryVisibility,
+			this.layout
 		);
 		this.trajectoryViews.push(view);
 		return view;
@@ -428,7 +532,8 @@ export class PlanetRenderer {
 				this.scene,
 				this.targetLayer,
 				centralBody,
-				this.worldSpanMeters
+				this.worldSpanMeters,
+				this.layout
 			);
 		} else {
 			this.targetOrbitView.setCentralBody(centralBody);
@@ -456,7 +561,8 @@ export class PlanetRenderer {
 				this.collisionEffectLayer,
 				event,
 				this.worldSpanMeters,
-				this.effectFont
+				this.effectFont,
+				this.layout
 			));
 			// この入口はMatchControllerが確定したActual event専用で、Predictionからは呼ばれません。
 			this.scene.asset.getAudioById("se").play();

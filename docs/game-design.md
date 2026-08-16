@@ -172,7 +172,21 @@ Aiming中のLaunch GuideはactiveStoneの実velocity方向（ドラッグと逆�
 
 Actual collisionだけがpresentation eventとなり、Stone–Stoneは`HIT!`、中央吸収はより大きい`ABSORBED!`と既存SEを一event一回表示・再生します。Prediction仮衝突は演出入口へ渡りません。予測は点線、actual trailは明瞭な実線として区別し、吸収点まで残します。終了時は盤面を背景に勝者・最終得点・Rematchを中央overlay表示し、Rematchは既存`newGame()`を再利用します。
 
-## ロードマップ（G5完了時点）
+## Phase G5.1 Mobile / Tablet Support
+
+Akashic内部は従来どおり1280×720の固定論理解像度です。`ResponsiveLayout`は物理device viewportからDesktop Landscape、Compact Landscape、Portraitを判定しますが、変更するのはView・HUD・入力用矩形だけです。物理座標、得点、collision radius、launch換算、trajectory samplingは参照も変更もしません。
+
+論理画面の左720×720を正方形のGame Board、右560×720をHUDとして分離しました。HUDにはScore、Turn、Shot、Simulation Progress、Stone Status、Prediction / Trails toggleを短い文言で縦に配置します。結果overlayはHUDではなく盤面中央へ収め、Rematchは260×80、通常toggleも高さ72～80のtouchable背景全体を入力対象にします。
+
+Stone Spriteの見た目と入力を分離し、Aiming中のactiveStoneだけ112～128px角の透明touch targetを表示します。targetはStoneを追従し、盤面境界内へclampします。過去Stoneと吸収Stoneでは非表示のため操作できません。ドラッグの論理量からlaunch velocityへの換算式は従来どおりです。
+
+Compact modeではLaunch GuideをStoneから離して長く太く描き、endpoint markerを追加します。Prediction dot、Actual Trail、Target Orbit dotも論理描画寸法だけを大きくします。予測期間、sample間隔、target radius、score thresholdは変更しません。
+
+Smartphone landscapeとtablet landscapeを正式サポートします。phone portraitでは`Please rotate your device` overlayが入力を受け止め、landscapeへ戻ると消えます。tablet portraitでは操作を残した小さな案内だけを表示します。
+
+GitHub Pages成果物は`akashic-cli-export-html --magnify`でbrowser viewportへfitさせます。`export/mobile-support.html`をexporterの`--inject`で毎回追加し、既存viewport metaへ`viewport-fit=cover`を設定します。CSSのsafe-area inset、`touch-action: none`、`overscroll-behavior: none`は再exportやGitHub Actionsでも同じ結果になります。FullscreenとPWA化は対象外です。
+
+## ロードマップ（G5.1完了時点）
 
 - G1 Local turn-based match — DONE
 - G2 Target orbit / score / result — DONE
@@ -180,5 +194,6 @@ Actual collisionだけがpresentation eventとなり、Stone–Stoneは`HIT!`、
 - G4 Collision — DONE
 - G4.1 Collision chronological fix — DONE
 - G5 UI / effects / game balance — DONE
+- G5.1 Mobile / Tablet support — DONE
 - G6 CPU
 - G7 Simple online multiplayer

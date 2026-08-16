@@ -1,6 +1,6 @@
 # PlanetCurling
 
-PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。現在はPhase G4として、ローカル2人対戦、得点・軌道表示に、惑星衝突と中央天体への吸収を追加しています。
+PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。現在はPhase G5.1として、G5までの対戦・衝突・HUD・演出をPC、スマートフォン横持ち、タブレットで遊べる画面へ整理しています。
 
 ## 現在できること
 
@@ -18,7 +18,9 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 - 6時間dtでもすり抜けを抑える連続円衝突判定と、質量差を考慮した投石同士の反発
 - 中央天体へ接触した投石の吸収、得点0、接触点で終わる軌跡
 - 投石衝突と吸収を区別する短時間フラッシュ
-- 現在ターン・投球数・得点・勝敗表示とNew Game
+- 盤面と分離した右サイドHUD、表示toggle、結果overlay、Rematch
+- スマートフォン横持ちとタブレットへ拡縮するGitHub Pages版
+- activeStoneだけに有効な大型透明タッチ領域
 - 6時間の固定物理タイムステップ
 - Symplectic Euler / Velocity Verletの切り替え
 - Akashic Engineに依存しない物理層の単体テスト
@@ -33,11 +35,13 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 4. 盤面が停止したら次のプレイヤーが投球します。
 5. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
 6. RedとBlueが3投ずつ終えると得点を確定し、勝敗を表示します。
-7. 右上の **New Game** で中央天体、投球、得点、勝敗、全軌跡を初期化できます。
+7. 結果overlayの **Rematch** で中央天体、投球、得点、勝敗、全軌跡を初期化できます。
 
 照準中は物理時間が停止するため、過去の惑星は動きません。投球済み惑星は中央天体や後続の投球惑星と同じNewton重力の重力源になり、互いに衝突すると反発します。中央天体へ接触した投石だけは吸収され、物理世界と重力源から除外されて得点0になります。過去の惑星を再度ドラッグすることはできません。
 
 画面上の`Dotted`は投球時点の予測、`Solid`は実軌跡です。予測時に存在しなかった後続惑星が追加されるため、過去の実軌跡が保存済み予測から外れることは正常なゲーム挙動です。
+
+スマートフォンは横持ちを正式サポートします。phoneの縦持ちでは横向き案内を表示してゲーム入力を止めます。tablet縦持ちは案内を表示しつつ最低限の操作を残します。ゲーム内部の論理解像度は端末によらず1280×720です。
 
 ## 技術構成
 
@@ -64,6 +68,8 @@ src/
   match_controller.ts     プレイヤー・駒・状態・ターン進行
   orbit_score.ts          Akashic非依存の軌道評価と得点計算
   rendering.ts            物理モデルからSpriteへの同期
+  responsive_layout.ts    盤面・HUD・touch targetの純粋レイアウト
+  game_hud_view.ts        右サイドHUD・結果・orientation案内
   input_velocity.ts       ドラッグ量から初速度への変換
   universe.ts             入力・ゲーム進行・描画の調停
 spec/                     単体・数値回帰・起動テスト
@@ -125,7 +131,7 @@ npm test
 npm run export-html
 ```
 
-`npm run export-html`はリポジトリ内の`game/`へ、`index.html`、JavaScript、アセットなどの静的ファイルを生成します。`game/`は一時成果物でありGit管理しません。ローカルでは`game/index.html`をブラウザで開いて確認できます。ブラウザの制約で直接開けない場合は、任意のローカルHTTPサーバーから`game/`を配信してください。
+`npm run export-html`は`--magnify`を使い、リポジトリ内の`game/`へviewportへfitする静的ファイルを生成します。管理対象の`export/mobile-support.html`がsafe area、viewport-fit、canvas上のscroll・overscroll対策を自動注入するため、生成後の手修正は不要です。`game/`は一時成果物でありGit管理しません。
 
 ## GitHub Pages
 
@@ -182,7 +188,7 @@ return PhysicsIntegratorKind.VelocityVerlet;
 
 6時間の固定base stepは変更せず、衝突候補があるstepだけ内部substepへ分割します。solverは同じIntegratorで残時間を仮積分し、Stone–StoneとStone–CentralBodyの全候補から最小time-of-impactを選び、full physics snapshotへ復元してTOIまで全天体を再積分します。衝突後の残時間も同じNewton重力と選択中Integratorで進み、1step最大12イベントまで連鎖衝突を処理します。PredictionとActualは同じ`SimulationRunner`経路です。
 
-G5では上部HUDにRed/Blue得点、turn、player shot / total shot、Stone別の`0～3` / `ABS` / `-`、10ゲーム年の進捗を表示します。Aiming中は実際の発射方向をLaunch Guideで示し、Prediction / Trailsは表示だけをON/OFFできます。Stone衝突は`HIT!`、太陽吸収は`ABSORBED!`と既存SEで区別し、6投後は盤面と軌跡を残した結果overlayからRematchできます。旧gravity / velocity vectorは通常画面では表示しません。
+G5ではRed/Blue得点、turn、player shot / total shot、Stone別の`0～3` / `ABS` / `-`、10ゲーム年の進捗を表示します。G5.1ではこれらを720×720盤面と右560px HUDへ分離し、button、font、Launch Guide、Prediction、Trail、Target Orbitを小画面でも見える論理寸法へ調整しました。物理・得点・衝突・launch速度の値は変更していません。
 
 ### バランス値の所在
 
