@@ -1,5 +1,8 @@
+import {CpuTurnController, CpuTurnState} from "./cpu_turn_controller";
 import {GameBalance} from "./game_balance";
 import {GameHudView, OrientationNoticeView} from "./game_hud_view";
+import {GameModeSelectionView} from "./game_mode_view";
+import {GameSessionConfig} from "./game_session";
 import {CurlingStone, MatchController, MatchState, Player} from "./match_controller";
 import {createPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
@@ -21,22 +24,46 @@ function main(_param: g.GameMainParameterObject): void {
 		const matchController: MatchController = new MatchController(runner);
 		const renderer: PlanetRenderer = new PlanetRenderer(scene, GameBalance.WorldSpanMeters, layout);
 		const universe: Universe = new Universe(matchController, renderer, GameBalance.WorldSpanMeters, g.game.width);
+		const sessionConfig: GameSessionConfig = new GameSessionConfig();
+		const cpuTurnController: CpuTurnController = new CpuTurnController(
+			sessionConfig,
+			matchController,
+			universe.trajectoryPredictor,
+			GameBalance.WorldSpanMeters,
+			g.game.width
+		);
 		const guideLayer: g.E = new g.E({scene: scene});
 		scene.append(guideLayer);
 		const launchGuide: LaunchGuideView = new LaunchGuideView(scene, guideLayer,
-			(): CurlingStone | undefined => matchController.state === MatchState.Aiming ? matchController.activeStone : undefined,
+			(): CurlingStone | undefined => matchController.state === MatchState.Aiming
+				&& (cpuTurnController.isHumanStoneInputAllowed
+					|| cpuTurnController.state === CpuTurnState.Previewing)
+				? matchController.activeStone : undefined,
 			GameBalance.WorldSpanMeters, layout);
-		const hud: GameHudView = new GameHudView(scene, font, matchController, renderer.trajectoryVisibility, layout);
-		const orientationNotice: OrientationNoticeView = new OrientationNoticeView(scene, font, layout);
+		const hud: GameHudView = new GameHudView(
+			scene,
+			font,
+			matchController,
+			renderer.trajectoryVisibility,
+			layout,
+			sessionConfig,
+			cpuTurnController
+		);
 
 		/** activeStoneだけへドラッグ入力とreleaseを接続します。 */
 		function bindStoneInput(stone: CurlingStone, view: PlanetView): void {
 			if (view.inputEntity === undefined) return;
 			view.inputEntity.onPointMove.add((event: g.PointMoveEvent): void => {
-				if (matchController.activeStone === stone) universe.playerDrag(event.startDelta.x, event.startDelta.y);
+				if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
+					&& matchController.activeStone === stone) {
+					universe.playerDrag(event.startDelta.x, event.startDelta.y);
+				}
 			});
 			view.inputEntity.onPointUp.add((): void => {
-				if (matchController.activeStone === stone) universe.releaseActiveStone();
+				if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
+					&& matchController.activeStone === stone) {
+					universe.releaseActiveStone();
+				}
 			});
 		}
 
@@ -47,14 +74,16 @@ function main(_param: g.GameMainParameterObject): void {
 				if (existing !== undefined) {
 					existing.setVisible(!stone.isAbsorbed);
 					existing.setInputActive(matchController.state === MatchState.Aiming
-						&& matchController.activeStone === stone && !stone.isAbsorbed);
+						&& matchController.activeStone === stone && !stone.isAbsorbed
+						&& !modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed);
 					return;
 				}
 				renderer.addStoneTrajectory(stone);
 				const view: PlanetView = renderer.addPlanet(stone.body, stone.owner === Player.Red ? "planet1" : "planet2", true);
 				view.setVisible(!stone.isAbsorbed);
 				view.setInputActive(matchController.state === MatchState.Aiming
-					&& matchController.activeStone === stone && !stone.isAbsorbed);
+					&& matchController.activeStone === stone && !stone.isAbsorbed
+					&& !modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed);
 				bindStoneInput(stone, view);
 			});
 		}
@@ -68,14 +97,30 @@ function main(_param: g.GameMainParameterObject): void {
 			renderer.update();
 		}
 
+		const modeSelection: GameModeSelectionView = new GameModeSelectionView(
+			scene,
+			font,
+			layout,
+			sessionConfig,
+			(): void => {
+				cpuTurnController.reset();
+				universe.newGame();
+				rebuildPlanetViews();
+			}
+		);
+		const orientationNotice: OrientationNoticeView = new OrientationNoticeView(scene, font, layout);
+
 		hud.rematchButton.onPointDown.add((): void => {
+			cpuTurnController.reset();
 			universe.newGame();
 			rebuildPlanetViews();
 		});
+		hud.changeModeButton.onPointDown.add((): void => modeSelection.show());
 		rebuildPlanetViews();
 		hud.update();
 		scene.onUpdate.add((): void => {
 			universe.update(1 / g.game.fps);
+			if (!modeSelection.isVisible) cpuTurnController.update();
 			synchronizeStoneViews();
 			launchGuide.modified();
 			hud.update();

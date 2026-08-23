@@ -101,6 +101,13 @@ describe("ResponsiveLayout", (): void => {
 		expect(layout.hudRect.contains(layout.trailsButtonRect)).toBe(true);
 		expect(layout.boardRect.contains(layout.resultOverlayRect)).toBe(true);
 		expect(layout.resultOverlayRect.contains(layout.rematchButtonRect)).toBe(true);
+		expect(layout.resultOverlayRect.contains(layout.changeModeButtonRect)).toBe(true);
+		expect(layout.screenRect.contains(layout.modeSelectionOverlayRect)).toBe(true);
+		expect(layout.modeSelectionOverlayRect.contains(layout.vsCpuButtonRect)).toBe(true);
+		expect(layout.modeSelectionOverlayRect.contains(layout.easyDifficultyButtonRect)).toBe(true);
+		expect(layout.modeSelectionOverlayRect.contains(layout.normalDifficultyButtonRect)).toBe(true);
+		expect(layout.modeSelectionOverlayRect.contains(layout.hardDifficultyButtonRect)).toBe(true);
+		expect(layout.modeSelectionOverlayRect.contains(layout.localTwoPlayerButtonRect)).toBe(true);
 	});
 
 	it("activeStoneの透明touch targetを見た目より大きくして盤面内へclampする", (): void => {

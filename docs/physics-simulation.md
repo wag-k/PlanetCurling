@@ -133,6 +133,14 @@ clone側のmass、radius、position、velocity、accelerationはすべて独立�
 
 予測と実軌跡の物理状態は6時間ごとに更新しますが、`TrajectoryRecorder`は10ゲーム日ごとの`TrajectoryPoint`だけを保存します。samplingは描画量と履歴量だけを削減し、積分結果は変えません。`SimulationRunner.advance()`の任意after-stepコールバックを記録に使い、Integratorは物理計算だけを担当します。
 
+## CPU候補のexact clone simulation
+
+`CpuShotSimulator`もTrajectory Predictorと同じclone境界を利用します。現在のBlue Aiming盤面を`PhysicsWorld.cloneWithMapping()`で複製し、active Stoneのcloneだけへ候補初速度を設定します。`CollisionSystem.cloneForWorld()`で中央天体と参加Stoneの参照をclone側へ張り替え、選択中の同じIntegrator、21,600秒のbase dt、365日基準の10年（14,600 base step）を`SimulationRunner`で完走します。
+
+候補simulationは最終位置・速度・吸収有無・得点だけを返し、10日sampleや`TrajectoryPoint[]`を生成しません。最善候補だけは決定後に既存`TrajectoryPredictor`をもう一度使い、Humanへ狙いを表示します。CPU専用の重力式、粗いdt、短い期間、collision省略はありません。
+
+original world、Planetの位置・速度・加速度、MatchController、CurlingStoneのrelease / absorption / trajectoryは候補評価から変更されません。同じ初期盤面と初速度を本番worldへ適用した場合、10年後の物理状態は衝突・吸収を含めてclone候補結果と同じになります。
+
 ## 将来の拡張ポイント
 
 - 予測難易度: 現在の10年予測期間を難易度別に変更するUIを追加する

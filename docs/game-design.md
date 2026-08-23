@@ -8,7 +8,7 @@ Phase G4では、G1～G3のターン、強い多体重力、得点・勝敗、�
 
 | 項目 | G4仕様 |
 |---|---|
-| Players | Red / Blue（ローカル2人対戦） |
+| Players | Local 2P: Red / Blue Human、Vs CPU: Red Human / Blue CPU |
 | Shots per player | 3 |
 | Turn order | RedとBlueが交互に投球 |
 | Total shots | 6 |
@@ -186,7 +186,46 @@ Smartphone landscapeとtablet landscapeを正式サポートします。phone po
 
 GitHub Pages成果物は`akashic-cli-export-html --magnify`でbrowser viewportへfitさせます。`export/mobile-support.html`をexporterの`--inject`で毎回追加し、既存viewport metaへ`viewport-fit=cover`を設定します。CSSのsafe-area inset、`touch-action: none`、`overscroll-behavior: none`は再exportやGitHub Actionsでも同じ結果になります。FullscreenとPWA化は対象外です。
 
-## ロードマップ（G5.1完了時点）
+## Phase G6 CPU opponent
+
+`GameSessionConfig`は物理層から独立して`LocalTwoPlayer` / `VsCpu`と`Easy` / `Normal` / `Hard`を保持します。起動時overlayで選択し、Rematchでは同じ値を維持します。Vs CPUはRedをHuman、BlueをCPUに固定し、Blue Aiming中は大型透明touch targetを含むStone入力を無効化します。`MatchController`は従来どおりTurn、Stone、Score、MatchState、Physics progressionだけを管理し、CPU判断を持ちません。
+
+CPUは現在のBlue Aiming盤面だけを見る1-ply searchです。minimaxや後続Human shot予測、乱数、scripted shotは使いません。
+
+```text
+current Blue Aiming PhysicsWorld
+  ↓ polar virtual drag candidates (all 360 degrees)
+  ↓ calculateLaunchVelocity() shared with Human
+PhysicsWorld.cloneWithMapping()
+  ↓ CollisionSystem.cloneForWorld()
+same Integrator / same 6-hour base dt / exact 10 game years
+  ↓ final board only (no TrajectoryPoint[] per candidate)
+CpuBoardEvaluator
+  ↓ global best local refinement
+best velocity → existing setActiveStoneVelocity()
+  ↓ existing TrajectoryPredictor / 15-frame preview
+existing releaseActiveStone()
+```
+
+候補gridはEasyが12方向×3速度=36件でrefinementなし、Normalが16×4=64件とglobal best周辺3×3（中心重複を除き合計72件）、Hardが24×5=120件と5×5（合計144件）です。virtual dragは0超300 logical px以下で、物理dtや人間入力自体をclampしません。局所gridが範囲端へ来た場合はgrid全体を内側へずらし、候補数と範囲を維持します。
+
+10年後の全リリース済みStoneと今回のactive Stoneを`OrbitScoreEvaluator`で再採点します。吸収されclone世界から削除されたStoneは0点です。連続軌道品質は次式をStoneごとに求めて合計します。
+
+```text
+orbitQuality = clamp(1 - effectiveOrbitError / OnePointOrbitError, 0, 1)
+
+utility = 1000 × (cpuScore - humanScore)
+        +   60 × (cpuOrbitQuality - humanOrbitQuality)
+        +  120 × newlyAbsorbedHumanCount
+        -  120 × newlyAbsorbedCpuExistingCount
+        -  180 × activeCpuStoneAbsorbed
+```
+
+同utility時は、active CPU Stone得点、CPU合計得点、Human合計得点の低さ、launch speedの小ささ、angleの小ささの順で決定します。探索とtie-breakは決定論的です。自己吸収はpenaltyですが絶対禁止ではないため、相手高得点Stoneを落として得点差が改善する自己犠牲は選択可能です。
+
+`CpuPlanningSession.step(1)`が1frameに1candidateだけをclone simulationし、HUDへ`CPU THINKING n / total`を表示します。MatchStateはAimingのまま、アプリケーション側`CpuTurnState`がIdle / Planning / Previewingを管理します。best決定後だけ既存TrajectoryPredictorを呼び、15frameの`CPU READY`表示後に通常releaseします。CPU候補と実投球は同じSimulationRunner・CollisionSystem経路なので、Stone衝突、Chronological TOI、multiple collision、中央吸収も一致します。
+
+## ロードマップ（G6完了時点）
 
 - G1 Local turn-based match — DONE
 - G2 Target orbit / score / result — DONE
@@ -195,5 +234,5 @@ GitHub Pages成果物は`akashic-cli-export-html --magnify`でbrowser viewport�
 - G4.1 Collision chronological fix — DONE
 - G5 UI / effects / game balance — DONE
 - G5.1 Mobile / Tablet support — DONE
-- G6 CPU
+- G6 CPU opponent — DONE
 - G7 Simple online multiplayer

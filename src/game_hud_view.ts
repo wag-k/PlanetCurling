@@ -1,4 +1,6 @@
-import {formatMatchResult, TrajectoryVisibility} from "./game_presentation";
+import {CpuTurnController, CpuTurnState} from "./cpu_turn_controller";
+import {formatMatchResultForMode, TrajectoryVisibility} from "./game_presentation";
+import {formatCpuDifficulty, GameMode, GameSessionConfig} from "./game_session";
 import {
 	CurlingStone, MatchController, MatchState, Player, StoneScoreStatus, StoneScoreStatusKind
 } from "./match_controller";
@@ -11,6 +13,8 @@ export class GameHudView {
 	readonly entity: g.E;
 	/** Rematch操作に利用する大型buttonです。 */
 	readonly rematchButton: g.FilledRect;
+	/** 結果画面から起動時Mode Selectionへ戻る大型buttonです。 */
+	readonly changeModeButton: g.FilledRect;
 	/** Prediction表示toggleに利用する大型buttonです。 */
 	readonly predictionButton: g.FilledRect;
 	/** Trails表示toggleに利用する大型buttonです。 */
@@ -19,6 +23,10 @@ export class GameHudView {
 	private readonly controller: MatchController;
 	/** 表示専用toggleです。 */
 	private readonly visibility: TrajectoryVisibility;
+	/** HUD表示とRematchで維持する対戦モード・CPU難易度です。 */
+	private readonly sessionConfig: GameSessionConfig;
+	/** Blue CPUのThinking進捗とPreview状態です。 */
+	private readonly cpuTurnController: CpuTurnController;
 	/** 1280×720内のHUD矩形・font・button寸法です。 */
 	private readonly layout: ResponsiveLayout;
 	/** 値が変わった時だけinvalidateするラベル群です。 */
@@ -38,11 +46,15 @@ export class GameHudView {
 		font: g.Font,
 		controller: MatchController,
 		visibility: TrajectoryVisibility,
-		layout: ResponsiveLayout
+		layout: ResponsiveLayout,
+		sessionConfig: GameSessionConfig,
+		cpuTurnController: CpuTurnController
 	) {
 		this.controller = controller;
 		this.visibility = visibility;
 		this.layout = layout;
+		this.sessionConfig = sessionConfig;
+		this.cpuTurnController = cpuTurnController;
 		this.entity = new g.E({scene: scene, width: layout.logicalWidth, height: layout.logicalHeight});
 		scene.append(this.entity);
 		this.entity.append(new g.FilledRect({
@@ -85,10 +97,11 @@ export class GameHudView {
 			height: layout.resultOverlayRect.height
 		});
 		this.addLabel(scene, font, "result", 42,
-			layout.resultOverlayRect.x + 130, layout.resultOverlayRect.y + 42, "white");
+			layout.resultOverlayRect.x + 155, layout.resultOverlayRect.y + 42, "white");
 		this.addLabel(scene, font, "finalScore", 30,
-			layout.resultOverlayRect.x + 105, layout.resultOverlayRect.y + 112, "white");
+			layout.resultOverlayRect.x + 118, layout.resultOverlayRect.y + 118, "white");
 		this.rematchButton = this.addButton(scene, font, layout.rematchButtonRect, "rematch");
+		this.changeModeButton = this.addButton(scene, font, layout.changeModeButtonRect, "changeMode");
 		this.turnOverlay = new g.Label({
 			scene: scene,
 			parent: this.entity,
@@ -109,19 +122,39 @@ export class GameHudView {
 		const player: string = this.controller.currentPlayer === Player.Red ? "RED" : "BLUE";
 		this.setText("redScore", "RED  " + this.controller.redScore);
 		this.setText("blueScore", "BLUE  " + this.controller.blueScore);
-		this.setText("turn", player + " TURN");
+		this.setText("turn", this.sessionConfig.gameMode === GameMode.VsCpu
+			&& this.controller.currentPlayer === Player.Blue ? "BLUE CPU" : player + " TURN");
 		this.setText("shot", "Shot " + this.controller.getCurrentPlayerShotNumber() + " / " + this.controller.shotsPerPlayer
 			+ "   Total " + this.controller.getCurrentTotalShotNumber() + " / " + this.controller.maximumTotalShots);
 		const years: number = this.controller.currentShotSimulationElapsedSeconds / Setting.SecondsPerYear;
-		this.setText("progress", this.controller.state === MatchState.Simulating
-			? "Year " + years.toFixed(1) + " / 10.0" : "Aim & Release");
-		const filled: number = Math.round(this.controller.simulationProgress * 16);
+		let progressText: string;
+		let progressRatio: number;
+		if (this.cpuTurnController.state === CpuTurnState.Planning) {
+			progressText = "CPU THINKING  " + this.cpuTurnController.evaluatedCandidateCount
+				+ " / " + this.cpuTurnController.totalCandidateCount;
+			progressRatio = this.cpuTurnController.planningProgress;
+		} else if (this.cpuTurnController.state === CpuTurnState.Previewing) {
+			progressText = "CPU READY";
+			progressRatio = 1;
+		} else if (this.controller.state === MatchState.Simulating) {
+			progressText = "Year " + years.toFixed(1) + " / 10.0";
+			progressRatio = this.controller.simulationProgress;
+		} else {
+			progressText = "Aim & Release";
+			progressRatio = 0;
+		}
+		this.setText("progress", progressText);
+		const filled: number = Math.round(progressRatio * 16);
 		this.setText("progressBar", "[" + this.repeat("|", filled) + this.repeat(".", 16 - filled) + "]");
 		this.setText("redStones", this.formatStones(Player.Red, "R"));
 		this.setText("blueStones", this.formatStones(Player.Blue, "B"));
-		this.setText("help", "Score: orbit + radial speed");
+		this.setText("help", this.sessionConfig.gameMode === GameMode.VsCpu
+			? "CPU: " + formatCpuDifficulty(this.sessionConfig.cpuDifficulty) + "   Orbit score"
+			: "LOCAL 2P   Orbit score");
 		this.setText("predictionToggle", "Prediction " + (this.visibility.predictionVisible ? "ON" : "OFF"));
 		this.setText("trailsToggle", "Trails " + (this.visibility.trailsVisible ? "ON" : "OFF"));
+		this.setText("rematch", "REMATCH");
+		this.setText("changeMode", "CHANGE MODE");
 		this.updateResultOverlay();
 		this.updateTurnOverlay(player);
 	}
@@ -155,14 +188,20 @@ export class GameHudView {
 			this.labels.result.show();
 			this.labels.finalScore.show();
 			this.labels.rematch.show();
-			this.setText("result", formatMatchResult(this.controller.result!));
-			this.setText("finalScore", "RED " + this.controller.redScore + " - " + this.controller.blueScore + " BLUE");
+			this.changeModeButton.show();
+			this.labels.changeMode.show();
+			this.setText("result", formatMatchResultForMode(this.controller.result!, this.sessionConfig.gameMode));
+			this.setText("finalScore", this.sessionConfig.gameMode === GameMode.VsCpu
+				? "YOU " + this.controller.redScore + " - " + this.controller.blueScore + " CPU"
+				: "RED " + this.controller.redScore + " - " + this.controller.blueScore + " BLUE");
 		} else {
 			this.resultOverlay.hide();
 			this.rematchButton.hide();
 			this.labels.result.hide();
 			this.labels.finalScore.hide();
 			this.labels.rematch.hide();
+			this.changeModeButton.hide();
+			this.labels.changeMode.hide();
 		}
 	}
 

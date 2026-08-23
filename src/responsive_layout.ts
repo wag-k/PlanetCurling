@@ -103,6 +103,20 @@ export class ResponsiveLayout {
 	readonly resultOverlayRect: LayoutRect;
 	/** Result overlay内のRematchタッチ領域です。 */
 	readonly rematchButtonRect: LayoutRect;
+	/** Result overlay内のMode変更タッチ領域です。 */
+	readonly changeModeButtonRect: LayoutRect;
+	/** 起動時Mode Selectionの中央panel領域です。 */
+	readonly modeSelectionOverlayRect: LayoutRect;
+	/** Mode SelectionのVs CPU開始タッチ領域です。 */
+	readonly vsCpuButtonRect: LayoutRect;
+	/** Mode SelectionのEasy難易度タッチ領域です。 */
+	readonly easyDifficultyButtonRect: LayoutRect;
+	/** Mode SelectionのNormal難易度タッチ領域です。 */
+	readonly normalDifficultyButtonRect: LayoutRect;
+	/** Mode SelectionのHard難易度タッチ領域です。 */
+	readonly hardDifficultyButtonRect: LayoutRect;
+	/** Mode SelectionのLocal 2P開始タッチ領域です。 */
+	readonly localTwoPlayerButtonRect: LayoutRect;
 	/** 短時間のTurn通知を置く盤面内領域です。 */
 	readonly turnOverlayRect: LayoutRect;
 	/** Score表示の論理font sizeです。 */
@@ -165,17 +179,36 @@ export class ResponsiveLayout {
 		this.predictionButtonRect = new LayoutRect(contentX, 438, buttonWidth, buttonHeight);
 		this.trailsButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 438, buttonWidth, buttonHeight);
 		this.resultOverlayRect = new LayoutRect(
-			this.boardRect.x + (this.boardRect.width - 520) / 2,
-			this.boardRect.y + (this.boardRect.height - 320) / 2,
-			520,
-			320
+			this.boardRect.x + (this.boardRect.width - 580) / 2,
+			this.boardRect.y + (this.boardRect.height - 340) / 2,
+			580,
+			340
 		);
 		this.rematchButtonRect = new LayoutRect(
-			this.resultOverlayRect.x + (this.resultOverlayRect.width - 260) / 2,
-			this.resultOverlayRect.y + 205,
-			260,
+			this.resultOverlayRect.x + 35,
+			this.resultOverlayRect.y + 225,
+			240,
 			80
 		);
+		this.changeModeButtonRect = new LayoutRect(
+			this.resultOverlayRect.x + 305,
+			this.resultOverlayRect.y + 225,
+			240,
+			80
+		);
+		this.modeSelectionOverlayRect = new LayoutRect(160, 50, logicalWidth - 320, logicalHeight - 100);
+		this.vsCpuButtonRect = new LayoutRect(430, 178, 420, 82);
+		const difficultyWidth: number = 180;
+		const difficultyGap: number = 24;
+		const difficultyStartX: number = (logicalWidth - (difficultyWidth * 3 + difficultyGap * 2)) / 2;
+		this.easyDifficultyButtonRect = new LayoutRect(difficultyStartX, 334, difficultyWidth, 76);
+		this.normalDifficultyButtonRect = new LayoutRect(
+			difficultyStartX + difficultyWidth + difficultyGap, 334, difficultyWidth, 76
+		);
+		this.hardDifficultyButtonRect = new LayoutRect(
+			difficultyStartX + (difficultyWidth + difficultyGap) * 2, 334, difficultyWidth, 76
+		);
+		this.localTwoPlayerButtonRect = new LayoutRect(430, 488, 420, 82);
 		this.turnOverlayRect = new LayoutRect(this.boardRect.x + 210, 48, 300, 56);
 		this.scoreFontSize = compact ? 34 : 32;
 		this.turnFontSize = compact ? 30 : 28;

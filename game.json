@@ -139,6 +139,41 @@
 			"type": "script",
 			"path": "script/responsive_layout.js",
 			"global": true
+		},
+		"cpu_candidate": {
+			"type": "script",
+			"path": "script/cpu_candidate.js",
+			"global": true
+		},
+		"cpu_settings": {
+			"type": "script",
+			"path": "script/cpu_settings.js",
+			"global": true
+		},
+		"game_session": {
+			"type": "script",
+			"path": "script/game_session.js",
+			"global": true
+		},
+		"cpu_planner": {
+			"type": "script",
+			"path": "script/cpu_planner.js",
+			"global": true
+		},
+		"cpu_simulation": {
+			"type": "script",
+			"path": "script/cpu_simulation.js",
+			"global": true
+		},
+		"cpu_turn_controller": {
+			"type": "script",
+			"path": "script/cpu_turn_controller.js",
+			"global": true
+		},
+		"game_mode_view": {
+			"type": "script",
+			"path": "script/game_mode_view.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

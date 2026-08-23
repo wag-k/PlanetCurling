@@ -1,7 +1,9 @@
 import {CollisionEvent, CollisionEventKind} from "../src/collision";
 import {
-	calculateSimulationProgress, CollisionPresentationEvent, formatMatchResult, TrajectoryVisibility
+	calculateSimulationProgress, CollisionPresentationEvent, formatMatchResult, formatMatchResultForMode,
+	TrajectoryVisibility
 } from "../src/game_presentation";
+import {GameMode} from "../src/game_session";
 import {MatchResult} from "../src/match_controller";
 import {Pos} from "../src/motion";
 import {Planet} from "../src/planet";
@@ -17,6 +19,13 @@ describe("G5 presentation pure logic", (): void => {
 		expect(formatMatchResult(MatchResult.RedWin)).toBe("RED WINS");
 		expect(formatMatchResult(MatchResult.BlueWin)).toBe("BLUE WINS");
 		expect(formatMatchResult(MatchResult.Draw)).toBe("DRAW");
+	});
+
+	it("Vs CPUだけYOU / CPU文言にし、Local 2Pは従来の色名を維持する", (): void => {
+		expect(formatMatchResultForMode(MatchResult.RedWin, GameMode.VsCpu)).toBe("YOU WIN");
+		expect(formatMatchResultForMode(MatchResult.BlueWin, GameMode.VsCpu)).toBe("CPU WINS");
+		expect(formatMatchResultForMode(MatchResult.Draw, GameMode.VsCpu)).toBe("DRAW");
+		expect(formatMatchResultForMode(MatchResult.BlueWin, GameMode.LocalTwoPlayer)).toBe("BLUE WINS");
 	});
 
 	it("trajectory toggleは独立した表示状態だけを変更する", (): void => {

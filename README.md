@@ -1,10 +1,13 @@
 # PlanetCurling
 
-PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。現在はPhase G5.1として、G5までの対戦・衝突・HUD・演出をPC、スマートフォン横持ち、タブレットで遊べる画面へ整理しています。
+PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Phase G6では、従来のLocal 2Pに加えて、現在盤面を本番と同じ物理で探索するCPU対戦をPC、スマートフォン横持ち、タブレットで遊べます。
 
 ## 現在できること
 
-- Red / Blueのローカル2人対戦
+- Red / Blueを人間が操作するLocal 2P
+- Human=Red、CPU=BlueのVs CPU（Easy / Normal / Hard、Normal推奨）
+- 現在盤面のcloneを多数の候補初速度で10年進める、決定論的な1-ply物理探索AI
+- HumanとCPUで共通のNewton重力、6時間dt、Chronological Collision、吸収、得点ルール
 - 各プレイヤー3投、交互に合計6投するターン進行
 - 現在ターンの惑星をドラッグして初速度を決める操作
 - 基準速度を1.5倍したドラッグ投球
@@ -25,17 +28,18 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 - Symplectic Euler / Velocity Verletの切り替え
 - Akashic Engineに依存しない物理層の単体テスト
 
-回転・摩擦・トルク、CPU、ネット対戦などはまだ実装していません。
+回転・摩擦・トルク、ネット対戦などはまだ実装していません。
 
 ## 遊び方
 
-1. 画面上の現在プレイヤー（Redは`planet1`、Blueは`planet2`の画像）をドラッグします。
-2. ドラッグ中は10年先の予測が点線で表示されます。点線リングを位置の目安に離すと投球が確定します。
-3. 投球後は物理世界が10ゲーム年進み、実際に通った経路が実線で延びます。
-4. 盤面が停止したら次のプレイヤーが投球します。
-5. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
-6. RedとBlueが3投ずつ終えると得点を確定し、勝敗を表示します。
-7. 結果overlayの **Rematch** で中央天体、投球、得点、勝敗、全軌跡を初期化できます。
+1. 起動時overlayで、推奨の **VS CPU / NORMAL** または **LOCAL 2P** を選びます。
+2. 画面上の人間プレイヤー（Vs CPUではRed、Local 2PではRed / Blue）をドラッグします。
+3. ドラッグ中は10年先の予測が点線で表示されます。点線リングを位置の目安に離すと投球が確定します。
+4. 投球後は物理世界が10ゲーム年進み、実際に通った経路が実線で延びます。
+5. Vs CPUのBlue turnでは候補を1frameに1件ずつ探索し、最善手の予測線を約0.5秒見せてから自動投球します。
+6. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
+7. RedとBlueが3投ずつ終えると得点を確定し、勝敗を表示します。
+8. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
 
 照準中は物理時間が停止するため、過去の惑星は動きません。投球済み惑星は中央天体や後続の投球惑星と同じNewton重力の重力源になり、互いに衝突すると反発します。中央天体へ接触した投石だけは吸収され、物理世界と重力源から除外されて得点0になります。過去の惑星を再度ドラッグすることはできません。
 
@@ -65,6 +69,12 @@ src/
   collision.ts            連続円衝突判定・反発・中央吸収
   trajectory.ts           Akashic非依存の予測計算・sample記録
   game_balance.ts         SI単位の暫定ゲームバランス値
+  game_session.ts         Local 2P / Vs CPUとCPU難易度
+  cpu_settings.ts         候補密度・演出時間・utility weight
+  cpu_candidate.ts        virtual dragの全方向候補生成
+  cpu_simulation.ts       clone世界の10年候補simulation・盤面評価
+  cpu_planner.ts          global / refinementのincremental探索
+  cpu_turn_controller.ts  Blue CPUのplanning・preview・release接続
   match_controller.ts     プレイヤー・駒・状態・ターン進行
   orbit_score.ts          Akashic非依存の軌道評価と得点計算
   rendering.ts            物理モデルからSpriteへの同期
@@ -183,12 +193,20 @@ return PhysicsIntegratorKind.VelocityVerlet;
 - 投球惑星の質量、発射位置、得点閾値はG2用の暫定値であり、プレイテスト後の調整が必要です。
 - 6時間dtは現在の初期条件向けの既定値で、すべての軌道の精度を保証しません。
 - シミュレーション速度が高いため、1画面更新で多数の固定ステップを実行します。
+- CPUは現在盤面だけを見る1-ply探索で、後続のHuman投球は予知しません。
+- Hardは144候補を1frame 1件ずつ処理するため、端末性能によりNormalより待ち時間が長くなります。
 
 ## Phase G4.1 / G5
 
 6時間の固定base stepは変更せず、衝突候補があるstepだけ内部substepへ分割します。solverは同じIntegratorで残時間を仮積分し、Stone–StoneとStone–CentralBodyの全候補から最小time-of-impactを選び、full physics snapshotへ復元してTOIまで全天体を再積分します。衝突後の残時間も同じNewton重力と選択中Integratorで進み、1step最大12イベントまで連鎖衝突を処理します。PredictionとActualは同じ`SimulationRunner`経路です。
 
 G5ではRed/Blue得点、turn、player shot / total shot、Stone別の`0～3` / `ABS` / `-`、10ゲーム年の進捗を表示します。G5.1ではこれらを720×720盤面と右560px HUDへ分離し、button、font、Launch Guide、Prediction、Trail、Target Orbitを小画面でも見える論理寸法へ調整しました。物理・得点・衝突・launch速度の値は変更していません。
+
+## Phase G6 CPU opponent
+
+Vs CPUではRedだけをHuman、BlueだけをCPUが操作します。CPUは最大300 logical pxのvirtual dragを`calculateLaunchVelocity()`へ渡し、人間と同じ初速度範囲から360度全方向を探索します。Easyは36 global候補、Normalは64 global＋3×3 refinement（重複中心を除く合計72）、Hardは120 global＋5×5 refinement（合計144）です。
+
+各候補は現在の`PhysicsWorld`をdeep cloneし、`CollisionSystem.cloneForWorld()`、同じIntegrator、6時間base dt、10ゲーム年を使って最終盤面だけを計算します。全候補の`TrajectoryPoint[]`は作らず、最善1候補だけ既存`TrajectoryPredictor`で表示します。評価はCPUとHumanの最終得点差を最優先し、連続軌道品質、新規Human吸収、既存CPU吸収、active Stone吸収を補助にします。探索順とtie-breakに乱数はなく、同じ盤面・難易度なら同じ投球です。
 
 ### バランス値の所在
 

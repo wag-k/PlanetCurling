@@ -1,4 +1,5 @@
 import {CollisionEvent, CollisionEventKind} from "./collision";
+import {GameMode} from "./game_session";
 import {MatchResult} from "./match_controller";
 
 /** 描画だけを切り替え、物理・予測計算・得点状態を変更しない表示設定です。 */
@@ -40,6 +41,14 @@ export class CollisionPresentationEvent {
 export function formatMatchResult(result: MatchResult): string {
 	if (result === MatchResult.RedWin) return "RED WINS";
 	if (result === MatchResult.BlueWin) return "BLUE WINS";
+	return "DRAW";
+}
+
+/** 対CPU戦ではRed/BlueをYOU/CPUへ読み替え、Local 2Pの従来文言を維持します。 */
+export function formatMatchResultForMode(result: MatchResult, gameMode: GameMode): string {
+	if (gameMode === GameMode.LocalTwoPlayer) return formatMatchResult(result);
+	if (result === MatchResult.RedWin) return "YOU WIN";
+	if (result === MatchResult.BlueWin) return "CPU WINS";
 	return "DRAW";
 }
 
