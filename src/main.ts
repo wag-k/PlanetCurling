@@ -8,6 +8,9 @@ import {createPhysicsIntegrator} from "./physics_integrator";
 import {PhysicsWorld} from "./physics_world";
 import {LaunchGuideView, PlanetRenderer, PlanetView} from "./rendering";
 import {calculateCurrentLayout, ResponsiveLayout} from "./responsive_layout";
+import {RulesContent} from "./rules_content";
+import {RulesOverlayView} from "./rules_overlay_view";
+import {RulesInteractionGate, RulesOverlayState} from "./rules_state";
 import {Setting} from "./setting";
 import {SimulationRunner} from "./simulation_runner";
 import {Universe} from "./universe";
@@ -22,6 +25,9 @@ function main(_param: g.GameMainParameterObject): void {
 		const runner: SimulationRunner = new SimulationRunner(new PhysicsWorld(),
 			createPhysicsIntegrator(Setting.IntegratorKind), Setting.PhysicsStepSeconds);
 		const matchController: MatchController = new MatchController(runner);
+		const rulesState: RulesOverlayState = new RulesOverlayState(
+			RulesContent.createDefault(matchController.scoreEvaluator)
+		);
 		const renderer: PlanetRenderer = new PlanetRenderer(scene, GameBalance.WorldSpanMeters, layout);
 		const universe: Universe = new Universe(matchController, renderer, GameBalance.WorldSpanMeters, g.game.width);
 		const sessionConfig: GameSessionConfig = new GameSessionConfig();
@@ -54,16 +60,20 @@ function main(_param: g.GameMainParameterObject): void {
 		function bindStoneInput(stone: CurlingStone, view: PlanetView): void {
 			if (view.inputEntity === undefined) return;
 			view.inputEntity.onPointMove.add((event: g.PointMoveEvent): void => {
-				if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
-					&& matchController.activeStone === stone) {
-					universe.playerDrag(event.startDelta.x, event.startDelta.y);
-				}
+				rulesGate.runHumanInput((): void => {
+					if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
+						&& matchController.activeStone === stone) {
+						universe.playerDrag(event.startDelta.x, event.startDelta.y);
+					}
+				});
 			});
 			view.inputEntity.onPointUp.add((): void => {
-				if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
-					&& matchController.activeStone === stone) {
-					universe.releaseActiveStone();
-				}
+				rulesGate.runHumanInput((): void => {
+					if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
+						&& matchController.activeStone === stone) {
+						universe.releaseActiveStone();
+					}
+				});
 			});
 		}
 
@@ -75,7 +85,8 @@ function main(_param: g.GameMainParameterObject): void {
 					existing.setVisible(!stone.isAbsorbed);
 					existing.setInputActive(matchController.state === MatchState.Aiming
 						&& matchController.activeStone === stone && !stone.isAbsorbed
-						&& !modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed);
+						&& !modeSelection.isVisible && !rulesOverlay.isVisible
+						&& cpuTurnController.isHumanStoneInputAllowed);
 					return;
 				}
 				renderer.addStoneTrajectory(stone);
@@ -83,7 +94,8 @@ function main(_param: g.GameMainParameterObject): void {
 				view.setVisible(!stone.isAbsorbed);
 				view.setInputActive(matchController.state === MatchState.Aiming
 					&& matchController.activeStone === stone && !stone.isAbsorbed
-					&& !modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed);
+					&& !modeSelection.isVisible && !rulesOverlay.isVisible
+					&& cpuTurnController.isHumanStoneInputAllowed);
 				bindStoneInput(stone, view);
 			});
 		}
@@ -108,22 +120,38 @@ function main(_param: g.GameMainParameterObject): void {
 				rebuildPlanetViews();
 			}
 		);
+		const rulesOverlay: RulesOverlayView = new RulesOverlayView(scene, font, layout, rulesState);
+		const rulesGate: RulesInteractionGate = new RulesInteractionGate(rulesOverlay);
 		const orientationNotice: OrientationNoticeView = new OrientationNoticeView(scene, font, layout);
 
 		hud.rematchButton.onPointDown.add((): void => {
-			cpuTurnController.reset();
-			universe.newGame();
-			rebuildPlanetViews();
+			rulesGate.runHumanInput((): void => {
+				cpuTurnController.reset();
+				universe.newGame();
+				rebuildPlanetViews();
+			});
 		});
-		hud.changeModeButton.onPointDown.add((): void => modeSelection.show());
+		hud.changeModeButton.onPointDown.add((): void => {
+			rulesGate.runHumanInput((): void => modeSelection.show());
+		});
+		hud.predictionButton.onPointDown.add((): void => {
+			rulesGate.runHumanInput((): void => renderer.trajectoryVisibility.togglePrediction());
+		});
+		hud.trailsButton.onPointDown.add((): void => {
+			rulesGate.runHumanInput((): void => renderer.trajectoryVisibility.toggleTrails());
+		});
+		hud.rulesButton.onPointDown.add((): void => rulesOverlay.show());
+		modeSelection.howToPlayButton.onPointDown.add((): void => rulesOverlay.show());
 		rebuildPlanetViews();
 		hud.update();
 		scene.onUpdate.add((): void => {
-			universe.update(1 / g.game.fps);
-			if (!modeSelection.isVisible) cpuTurnController.update();
-			synchronizeStoneViews();
-			launchGuide.modified();
-			hud.update();
+			rulesGate.runFrame((): void => {
+				universe.update(1 / g.game.fps);
+				if (!modeSelection.isVisible) cpuTurnController.update();
+				synchronizeStoneViews();
+				launchGuide.modified();
+				hud.update();
+			});
 			orientationNotice.update();
 			scene.modified();
 		});

@@ -29,6 +29,10 @@ describe("ResponsiveLayout", (): void => {
 		expect(layout.mode).toBe(LayoutMode.CompactLandscape);
 		expect(layout.predictionButtonRect.height).toBeGreaterThanOrEqual(64);
 		expect(layout.trailsButtonRect.height).toBeGreaterThanOrEqual(64);
+		expect(layout.rulesButtonRect.height).toBeGreaterThanOrEqual(64);
+		expect(layout.rulesCloseButtonRect.height).toBeGreaterThanOrEqual(64);
+		expect(layout.rulesPreviousButtonRect.height).toBeGreaterThanOrEqual(64);
+		expect(layout.rulesNextButtonRect.height).toBeGreaterThanOrEqual(64);
 		expect(layout.buttonFontSize).toBeGreaterThanOrEqual(22);
 		expect(layout.stoneTouchTargetSize).toBeGreaterThanOrEqual(100);
 	});
@@ -99,6 +103,7 @@ describe("ResponsiveLayout", (): void => {
 		expect(layout.hudRect.contains(layout.stoneStatusRect)).toBe(true);
 		expect(layout.hudRect.contains(layout.predictionButtonRect)).toBe(true);
 		expect(layout.hudRect.contains(layout.trailsButtonRect)).toBe(true);
+		expect(layout.hudRect.contains(layout.rulesButtonRect)).toBe(true);
 		expect(layout.boardRect.contains(layout.resultOverlayRect)).toBe(true);
 		expect(layout.resultOverlayRect.contains(layout.rematchButtonRect)).toBe(true);
 		expect(layout.resultOverlayRect.contains(layout.changeModeButtonRect)).toBe(true);
@@ -108,6 +113,13 @@ describe("ResponsiveLayout", (): void => {
 		expect(layout.modeSelectionOverlayRect.contains(layout.normalDifficultyButtonRect)).toBe(true);
 		expect(layout.modeSelectionOverlayRect.contains(layout.hardDifficultyButtonRect)).toBe(true);
 		expect(layout.modeSelectionOverlayRect.contains(layout.localTwoPlayerButtonRect)).toBe(true);
+		expect(layout.modeSelectionOverlayRect.contains(layout.howToPlayButtonRect)).toBe(true);
+		expect(layout.screenRect.contains(layout.rulesOverlayRect)).toBe(true);
+		expect(layout.rulesOverlayRect.contains(layout.rulesContentRect)).toBe(true);
+		expect(layout.rulesOverlayRect.contains(layout.rulesCloseButtonRect)).toBe(true);
+		expect(layout.rulesOverlayRect.contains(layout.rulesPreviousButtonRect)).toBe(true);
+		expect(layout.rulesOverlayRect.contains(layout.rulesNextButtonRect)).toBe(true);
+		expect(layout.rulesOverlayRect.contains(layout.rulesPageIndicatorRect)).toBe(true);
 	});
 
 	it("activeStoneの透明touch targetを見た目より大きくして盤面内へclampする", (): void => {

@@ -15,6 +15,8 @@ export class GameModeSelectionView {
 	readonly normalButton: g.FilledRect;
 	/** Hardを選ぶbuttonです。 */
 	readonly hardButton: g.FilledRect;
+	/** ゲーム開始前に共通Rules Overlayを開くbuttonです。 */
+	readonly howToPlayButton: g.FilledRect;
 	/** Rematchでも共有する選択設定です。 */
 	private readonly sessionConfig: GameSessionConfig;
 	/** 選択確定後にNew Gameを開始するcallbackです。 */
@@ -65,6 +67,9 @@ export class GameModeSelectionView {
 		this.addLabel(scene, font, "TWO PLAYERS", 24, 549, 452, "#ffccbc");
 		this.localTwoPlayerButton = this.addButton(
 			scene, font, layout.localTwoPlayerButtonRect, "LOCAL 2P", "#63435b"
+		);
+		this.howToPlayButton = this.addButton(
+			scene, font, layout.howToPlayButtonRect, "HOW TO PLAY", "#34516d"
 		);
 		this.easyButton.onPointDown.add((): void => this.selectDifficulty(CpuDifficulty.Easy));
 		this.normalButton.onPointDown.add((): void => this.selectDifficulty(CpuDifficulty.Normal));

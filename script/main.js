@@ -8,6 +8,9 @@ var physics_integrator_1 = require("./physics_integrator");
 var physics_world_1 = require("./physics_world");
 var rendering_1 = require("./rendering");
 var responsive_layout_1 = require("./responsive_layout");
+var rules_content_1 = require("./rules_content");
+var rules_overlay_view_1 = require("./rules_overlay_view");
+var rules_state_1 = require("./rules_state");
 var setting_1 = require("./setting");
 var simulation_runner_1 = require("./simulation_runner");
 var universe_1 = require("./universe");
@@ -19,6 +22,7 @@ function main(_param) {
         var layout = responsive_layout_1.calculateCurrentLayout(g.game.width, g.game.height);
         var runner = new simulation_runner_1.SimulationRunner(new physics_world_1.PhysicsWorld(), physics_integrator_1.createPhysicsIntegrator(setting_1.Setting.IntegratorKind), setting_1.Setting.PhysicsStepSeconds);
         var matchController = new match_controller_1.MatchController(runner);
+        var rulesState = new rules_state_1.RulesOverlayState(rules_content_1.RulesContent.createDefault(matchController.scoreEvaluator));
         var renderer = new rendering_1.PlanetRenderer(scene, game_balance_1.GameBalance.WorldSpanMeters, layout);
         var universe = new universe_1.Universe(matchController, renderer, game_balance_1.GameBalance.WorldSpanMeters, g.game.width);
         var sessionConfig = new game_session_1.GameSessionConfig();
@@ -35,16 +39,20 @@ function main(_param) {
             if (view.inputEntity === undefined)
                 return;
             view.inputEntity.onPointMove.add(function (event) {
-                if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
-                    && matchController.activeStone === stone) {
-                    universe.playerDrag(event.startDelta.x, event.startDelta.y);
-                }
+                rulesGate.runHumanInput(function () {
+                    if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
+                        && matchController.activeStone === stone) {
+                        universe.playerDrag(event.startDelta.x, event.startDelta.y);
+                    }
+                });
             });
             view.inputEntity.onPointUp.add(function () {
-                if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
-                    && matchController.activeStone === stone) {
-                    universe.releaseActiveStone();
-                }
+                rulesGate.runHumanInput(function () {
+                    if (!modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed
+                        && matchController.activeStone === stone) {
+                        universe.releaseActiveStone();
+                    }
+                });
             });
         }
         /** 動的に生成されたStoneへ所有者色のViewと軌跡Viewを一度だけ追加します。 */
@@ -55,7 +63,8 @@ function main(_param) {
                     existing.setVisible(!stone.isAbsorbed);
                     existing.setInputActive(matchController.state === match_controller_1.MatchState.Aiming
                         && matchController.activeStone === stone && !stone.isAbsorbed
-                        && !modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed);
+                        && !modeSelection.isVisible && !rulesOverlay.isVisible
+                        && cpuTurnController.isHumanStoneInputAllowed);
                     return;
                 }
                 renderer.addStoneTrajectory(stone);
@@ -63,7 +72,8 @@ function main(_param) {
                 view.setVisible(!stone.isAbsorbed);
                 view.setInputActive(matchController.state === match_controller_1.MatchState.Aiming
                     && matchController.activeStone === stone && !stone.isAbsorbed
-                    && !modeSelection.isVisible && cpuTurnController.isHumanStoneInputAllowed);
+                    && !modeSelection.isVisible && !rulesOverlay.isVisible
+                    && cpuTurnController.isHumanStoneInputAllowed);
                 bindStoneInput(stone, view);
             });
         }
@@ -80,22 +90,38 @@ function main(_param) {
             universe.newGame();
             rebuildPlanetViews();
         });
+        var rulesOverlay = new rules_overlay_view_1.RulesOverlayView(scene, font, layout, rulesState);
+        var rulesGate = new rules_state_1.RulesInteractionGate(rulesOverlay);
         var orientationNotice = new game_hud_view_1.OrientationNoticeView(scene, font, layout);
         hud.rematchButton.onPointDown.add(function () {
-            cpuTurnController.reset();
-            universe.newGame();
-            rebuildPlanetViews();
+            rulesGate.runHumanInput(function () {
+                cpuTurnController.reset();
+                universe.newGame();
+                rebuildPlanetViews();
+            });
         });
-        hud.changeModeButton.onPointDown.add(function () { return modeSelection.show(); });
+        hud.changeModeButton.onPointDown.add(function () {
+            rulesGate.runHumanInput(function () { return modeSelection.show(); });
+        });
+        hud.predictionButton.onPointDown.add(function () {
+            rulesGate.runHumanInput(function () { return renderer.trajectoryVisibility.togglePrediction(); });
+        });
+        hud.trailsButton.onPointDown.add(function () {
+            rulesGate.runHumanInput(function () { return renderer.trajectoryVisibility.toggleTrails(); });
+        });
+        hud.rulesButton.onPointDown.add(function () { return rulesOverlay.show(); });
+        modeSelection.howToPlayButton.onPointDown.add(function () { return rulesOverlay.show(); });
         rebuildPlanetViews();
         hud.update();
         scene.onUpdate.add(function () {
-            universe.update(1 / g.game.fps);
-            if (!modeSelection.isVisible)
-                cpuTurnController.update();
-            synchronizeStoneViews();
-            launchGuide.modified();
-            hud.update();
+            rulesGate.runFrame(function () {
+                universe.update(1 / g.game.fps);
+                if (!modeSelection.isVisible)
+                    cpuTurnController.update();
+                synchronizeStoneViews();
+                launchGuide.modified();
+                hud.update();
+            });
             orientationNotice.update();
             scene.modified();
         });

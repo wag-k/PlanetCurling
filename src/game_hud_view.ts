@@ -19,6 +19,8 @@ export class GameHudView {
 	readonly predictionButton: g.FilledRect;
 	/** Trails表示toggleに利用する大型buttonです。 */
 	readonly trailsButton: g.FilledRect;
+	/** 共通Rules Overlayを開く大型buttonです。 */
+	readonly rulesButton: g.FilledRect;
 	/** 試合状態の読み取り元です。 */
 	private readonly controller: MatchController;
 	/** 表示専用toggleです。 */
@@ -86,6 +88,7 @@ export class GameHudView {
 			layout.stoneStatusRect.x, layout.stoneStatusRect.bottom - 18, "#cfd8dc");
 		this.predictionButton = this.addButton(scene, font, layout.predictionButtonRect, "predictionToggle");
 		this.trailsButton = this.addButton(scene, font, layout.trailsButtonRect, "trailsToggle");
+		this.rulesButton = this.addButton(scene, font, layout.rulesButtonRect, "rules");
 		this.resultOverlay = new g.FilledRect({
 			scene: scene,
 			parent: this.entity,
@@ -112,8 +115,6 @@ export class GameHudView {
 			y: layout.turnOverlayRect.y,
 			textColor: "#ffffff"
 		});
-		this.predictionButton.onPointDown.add((): void => this.visibility.togglePrediction());
-		this.trailsButton.onPointDown.add((): void => this.visibility.toggleTrails());
 		this.update();
 	}
 
@@ -151,8 +152,9 @@ export class GameHudView {
 		this.setText("help", this.sessionConfig.gameMode === GameMode.VsCpu
 			? "CPU: " + formatCpuDifficulty(this.sessionConfig.cpuDifficulty) + "   Orbit score"
 			: "LOCAL 2P   Orbit score");
-		this.setText("predictionToggle", "Prediction " + (this.visibility.predictionVisible ? "ON" : "OFF"));
-		this.setText("trailsToggle", "Trails " + (this.visibility.trailsVisible ? "ON" : "OFF"));
+		this.setText("predictionToggle", "PRED " + (this.visibility.predictionVisible ? "ON" : "OFF"));
+		this.setText("trailsToggle", "TRAIL " + (this.visibility.trailsVisible ? "ON" : "OFF"));
+		this.setText("rules", "RULES");
 		this.setText("rematch", "REMATCH");
 		this.setText("changeMode", "CHANGE MODE");
 		this.updateResultOverlay();

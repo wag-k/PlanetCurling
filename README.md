@@ -1,6 +1,6 @@
 # PlanetCurling
 
-PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Phase G6では、従来のLocal 2Pに加えて、現在盤面を本番と同じ物理で探索するCPU対戦をPC、スマートフォン横持ち、タブレットで遊べます。
+PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Phase G6.1では、Local 2PとCPU対戦に加え、READMEを開かずゲーム内でルールを確認できるHow to Play / Rules UIをPC、スマートフォン横持ち、タブレットで利用できます。
 
 ## 現在できること
 
@@ -24,6 +24,8 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 - 盤面と分離した右サイドHUD、表示toggle、結果overlay、Rematch
 - スマートフォン横持ちとタブレットへ拡縮するGitHub Pages版
 - activeStoneだけに有効な大型透明タッチ領域
+- 起動前の **HOW TO PLAY** とプレイ中の **RULES** から共有する3ページのルール説明
+- Rules表示中のSimulation、Turn、CPU planning / preview、人間入力の一時停止と継続再開
 - 6時間の固定物理タイムステップ
 - Symplectic Euler / Velocity Verletの切り替え
 - Akashic Engineに依存しない物理層の単体テスト
@@ -32,14 +34,16 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 
 ## 遊び方
 
-1. 起動時overlayで、推奨の **VS CPU / NORMAL** または **LOCAL 2P** を選びます。
-2. 画面上の人間プレイヤー（Vs CPUではRed、Local 2PではRed / Blue）をドラッグします。
-3. ドラッグ中は10年先の予測が点線で表示されます。点線リングを位置の目安に離すと投球が確定します。
-4. 投球後は物理世界が10ゲーム年進み、実際に通った経路が実線で延びます。
-5. Vs CPUのBlue turnでは候補を1frameに1件ずつ探索し、最善手の予測線を約0.5秒見せてから自動投球します。
-6. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
-7. RedとBlueが3投ずつ終えると得点を確定し、勝敗を表示します。
-8. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
+1. 初めて遊ぶ場合は、起動時overlayの **HOW TO PLAY** でGoal、Score、操作、衝突を確認します。
+2. 起動時overlayで、推奨の **VS CPU / NORMAL** または **LOCAL 2P** を選びます。
+3. 画面上の人間プレイヤー（Vs CPUではRed、Local 2PではRed / Blue）をドラッグします。
+4. ドラッグ中は10年先の予測が点線で表示されます。点線リングを位置の目安に離すと投球が確定します。
+5. 投球後は物理世界が10ゲーム年進み、実際に通った経路が実線で延びます。
+6. Vs CPUのBlue turnでは候補を1frameに1件ずつ探索し、最善手の予測線を約0.5秒見せてから自動投球します。
+7. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
+8. RedとBlueが3投ずつ終えると得点を確定し、勝敗を表示します。
+9. **RULES** はプレイ中やCPU THINKING中にも開けます。**CLOSE** 後は同じ状態から再開します。
+10. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
 
 照準中は物理時間が停止するため、過去の惑星は動きません。投球済み惑星は中央天体や後続の投球惑星と同じNewton重力の重力源になり、互いに衝突すると反発します。中央天体へ接触した投石だけは吸収され、物理世界と重力源から除外されて得点0になります。過去の惑星を再度ドラッグすることはできません。
 
@@ -80,6 +84,9 @@ src/
   rendering.ts            物理モデルからSpriteへの同期
   responsive_layout.ts    盤面・HUD・touch targetの純粋レイアウト
   game_hud_view.ts        右サイドHUD・結果・orientation案内
+  rules_content.ts        3ページの翻訳可能なRules data
+  rules_state.ts          Page navigationとpause/input gate
+  rules_overlay_view.ts   Mode Selection / HUD共通のRules描画
   input_velocity.ts       ドラッグ量から初速度への変換
   universe.ts             入力・ゲーム進行・描画の調停
 spec/                     単体・数値回帰・起動テスト
@@ -216,3 +223,17 @@ Vs CPUではRedだけをHuman、BlueだけをCPUが操作します。CPUは最�
 | launch multiplier、6時間dt、10年simulation、10年prediction | `src/setting.ts` (`Setting`) |
 
 今回、これらの既存値は変更していません。ゲーム内設定画面は設けず、得点は「位置誤差 + 動径速度」の既存ルールを維持します。
+
+## Phase G6.1 How to Play / Rules UI
+
+起動時Mode Selectionの **HOW TO PLAY** とプレイ中HUDの **RULES** は、同じ`RulesOverlayView`を表示します。説明は次の3ページです。
+
+1. **GOAL & SCORE** — 3投ずつの勝敗、0～3点、2 AU target、位置誤差と動径速度を使う得点詳細
+2. **HOW TO PLAY** — Drag / Arrow / Prediction / Release / 10年進行、残り続ける惑星と多体重力、点線と実線
+3. **COLLISIONS & TACTICS** — 衝突、Sun吸収、得点・防御・攻撃、Vs CPUの色と難易度
+
+得点の数値はRules側へ複製せず、`OrbitScoreEvaluator`、`GameBalance`、`Setting`、`PhysicalConstant`から表示文を生成します。**EVERY SHOT CHANGES THE GRAVITY FIELD.** を中心ルールとして明示しています。
+
+Rules表示中はApplication層の共通gateが`Universe.update()`と`CpuTurnController.update()`を呼ばず、Simulation、Turn Transition、CPU candidate evaluation、CPU preview countdownを停止します。Stone drag/release、Prediction/Trail toggle、Rematch、Change Modeも同じgateと全画面touchable背景でblockします。CLOSE後はMatchControllerやCpuPlanningSessionを作り直さず、その時点から継続します。
+
+`ResponsiveLayout`はRules panel、CLOSE、PREV、NEXT、page indicator、起動前/HUD buttonを1280×720論理画面内へ配置します。3ページ分割により、smartphone landscapeでも本文を極端に縮小しません。

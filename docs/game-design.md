@@ -225,7 +225,23 @@ utility = 1000 × (cpuScore - humanScore)
 
 `CpuPlanningSession.step(1)`が1frameに1candidateだけをclone simulationし、HUDへ`CPU THINKING n / total`を表示します。MatchStateはAimingのまま、アプリケーション側`CpuTurnState`がIdle / Planning / Previewingを管理します。best決定後だけ既存TrajectoryPredictorを呼び、15frameの`CPU READY`表示後に通常releaseします。CPU候補と実投球は同じSimulationRunner・CollisionSystem経路なので、Stone衝突、Chronological TOI、multiple collision、中央吸収も一致します。
 
-## ロードマップ（G6完了時点）
+## Phase G6.1 How to Play / Rules UI
+
+Mode Selectionの`HOW TO PLAY`とGame HUDの`RULES`は、同一の`RulesOverlayView`を開きます。`RulesContent`はAkashic描画から分離した`RulePage` / `RuleSection` / `RuleLine`を持ち、将来の翻訳や文言変更でViewを作り直しません。
+
+3ページの責務は次のとおりです。
+
+- **GOAL & SCORE**: 3投ずつの勝敗、得点帯、位置と動径速度、2 AU targetと包含閾値
+- **HOW TO PLAY**: drag、launch guide、prediction、release、10年simulation、残留Planetの多体重力、Dotted / Solid
+- **COLLISIONS & TACTICS**: opponentへの衝突、Sun吸収、攻撃・防御、Vs CPUの色と探索精度
+
+得点説明のtarget radius、velocity reference、0.20 / 0.50 / 1.00 AU閾値は`OrbitScoreEvaluator`の現在値を`PhysicalConstant.AstroUnit`と`Setting.SecondsPerYear`で表示変換します。Rules専用の得点定数は持ちません。
+
+`RulesOverlayState`はpage navigationと表示状態だけを所有し、`RulesInteractionGate`がその`isVisible`を参照します。表示中は1frameの`Universe.update()`と`CpuTurnController.update()`をまとめてskipするため、Simulating、TurnTransition、CPU Planning、CPU Previewを同じstateのまま停止します。Human Stone入力とHUD操作も同じgateを通し、全画面touchable背景を入力の最終防壁にします。CLOSE時にMatchStateやCpuPlanningSessionを変更しないため、その続きから再開します。
+
+`ResponsiveLayout`はRules panel、本文、CLOSE、PREV、NEXT、page indicator、Mode Selection / HUD入口を論理画面内へ収めます。pageを分割し、Compact Landscapeでもtouch targetを64 logical px以上に保ちます。
+
+## ロードマップ（G6.1完了時点）
 
 - G1 Local turn-based match — DONE
 - G2 Target orbit / score / result — DONE
@@ -235,4 +251,5 @@ utility = 1000 × (cpuScore - humanScore)
 - G5 UI / effects / game balance — DONE
 - G5.1 Mobile / Tablet support — DONE
 - G6 CPU opponent — DONE
+- G6.1 How to Play / Rules UI — DONE
 - G7 Simple online multiplayer

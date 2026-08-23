@@ -99,6 +99,8 @@ export class ResponsiveLayout {
 	readonly predictionButtonRect: LayoutRect;
 	/** Trails切替のタッチ領域です。 */
 	readonly trailsButtonRect: LayoutRect;
+	/** Rules Overlayを開くHUDタッチ領域です。 */
+	readonly rulesButtonRect: LayoutRect;
 	/** 試合終了時に盤面中央へ置くoverlay領域です。 */
 	readonly resultOverlayRect: LayoutRect;
 	/** Result overlay内のRematchタッチ領域です。 */
@@ -117,6 +119,20 @@ export class ResponsiveLayout {
 	readonly hardDifficultyButtonRect: LayoutRect;
 	/** Mode SelectionのLocal 2P開始タッチ領域です。 */
 	readonly localTwoPlayerButtonRect: LayoutRect;
+	/** Mode SelectionからRules Overlayを開くタッチ領域です。 */
+	readonly howToPlayButtonRect: LayoutRect;
+	/** 論理画面内へ収めるRules Overlay panelです。 */
+	readonly rulesOverlayRect: LayoutRect;
+	/** Rules本文を配置するpanel内領域です。 */
+	readonly rulesContentRect: LayoutRect;
+	/** Rules Overlayを閉じるタッチ領域です。 */
+	readonly rulesCloseButtonRect: LayoutRect;
+	/** Rulesの前pageへ戻るタッチ領域です。 */
+	readonly rulesPreviousButtonRect: LayoutRect;
+	/** Rulesの次pageへ進むタッチ領域です。 */
+	readonly rulesNextButtonRect: LayoutRect;
+	/** Rulesのpage indicatorを中央表示する領域です。 */
+	readonly rulesPageIndicatorRect: LayoutRect;
 	/** 短時間のTurn通知を置く盤面内領域です。 */
 	readonly turnOverlayRect: LayoutRect;
 	/** Score表示の論理font sizeです。 */
@@ -129,6 +145,14 @@ export class ResponsiveLayout {
 	readonly statusFontSize: number;
 	/** Button表示の論理font sizeです。 */
 	readonly buttonFontSize: number;
+	/** Rules page titleの論理font sizeです。 */
+	readonly rulesTitleFontSize: number;
+	/** Rules section headingの論理font sizeです。 */
+	readonly rulesHeadingFontSize: number;
+	/** Rules基本説明の論理font sizeです。 */
+	readonly rulesBodyFontSize: number;
+	/** Rules詳細説明の論理font sizeです。 */
+	readonly rulesDetailFontSize: number;
 	/** activeStoneだけに使う透明タッチ領域の一辺です。 */
 	readonly stoneTouchTargetSize: number;
 	/** Launch GuideをStoneから離して開始する距離です。 */
@@ -173,11 +197,12 @@ export class ResponsiveLayout {
 		this.turnRect = new LayoutRect(contentX, 92, contentWidth, 82);
 		this.progressRect = new LayoutRect(contentX, 190, contentWidth, 76);
 		this.stoneStatusRect = new LayoutRect(contentX, 286, contentWidth, 116);
-		const buttonGap: number = 20;
-		const buttonWidth: number = (contentWidth - buttonGap) / 2;
+		const buttonGap: number = 12;
+		const buttonWidth: number = (contentWidth - buttonGap * 2) / 3;
 		const buttonHeight: number = compact ? 80 : 72;
 		this.predictionButtonRect = new LayoutRect(contentX, 438, buttonWidth, buttonHeight);
 		this.trailsButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 438, buttonWidth, buttonHeight);
+		this.rulesButtonRect = new LayoutRect(contentX + (buttonWidth + buttonGap) * 2, 438, buttonWidth, buttonHeight);
 		this.resultOverlayRect = new LayoutRect(
 			this.boardRect.x + (this.boardRect.width - 580) / 2,
 			this.boardRect.y + (this.boardRect.height - 340) / 2,
@@ -209,12 +234,33 @@ export class ResponsiveLayout {
 			difficultyStartX + (difficultyWidth + difficultyGap) * 2, 334, difficultyWidth, 76
 		);
 		this.localTwoPlayerButtonRect = new LayoutRect(430, 488, 420, 82);
+		this.howToPlayButtonRect = new LayoutRect(430, 590, 420, 64);
+		this.rulesOverlayRect = new LayoutRect(70, 18, logicalWidth - 140, logicalHeight - 36);
+		this.rulesContentRect = new LayoutRect(
+			this.rulesOverlayRect.x + 40,
+			this.rulesOverlayRect.y + 68,
+			this.rulesOverlayRect.width - 80,
+			this.rulesOverlayRect.height - 176
+		);
+		this.rulesCloseButtonRect = new LayoutRect(this.rulesOverlayRect.right - 160, this.rulesOverlayRect.y + 18, 130, 64);
+		this.rulesPreviousButtonRect = new LayoutRect(this.rulesOverlayRect.x + 40, this.rulesOverlayRect.bottom - 82, 180, 64);
+		this.rulesNextButtonRect = new LayoutRect(this.rulesOverlayRect.x + 450, this.rulesOverlayRect.bottom - 82, 180, 64);
+		this.rulesPageIndicatorRect = new LayoutRect(
+			this.rulesOverlayRect.x + 255,
+			this.rulesOverlayRect.bottom - 68,
+			180,
+			44
+		);
 		this.turnOverlayRect = new LayoutRect(this.boardRect.x + 210, 48, 300, 56);
 		this.scoreFontSize = compact ? 34 : 32;
 		this.turnFontSize = compact ? 30 : 28;
 		this.bodyFontSize = compact ? 25 : 23;
 		this.statusFontSize = compact ? 23 : 21;
 		this.buttonFontSize = compact ? 25 : 23;
+		this.rulesTitleFontSize = compact ? 32 : 30;
+		this.rulesHeadingFontSize = compact ? 23 : 22;
+		this.rulesBodyFontSize = compact ? 21 : 20;
+		this.rulesDetailFontSize = compact ? 18 : 17;
 		this.stoneTouchTargetSize = compact ? 128 : 112;
 		this.launchGuideStartOffset = compact ? 30 : 22;
 		this.launchGuideMinimumLength = compact ? 72 : 52;
