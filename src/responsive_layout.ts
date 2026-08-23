@@ -107,6 +107,8 @@ export class ResponsiveLayout {
 	readonly rematchButtonRect: LayoutRect;
 	/** Result overlay内のMode変更タッチ領域です。 */
 	readonly changeModeButtonRect: LayoutRect;
+	/** EndTransition overlayから次Endを開始するタッチ領域です。 */
+	readonly nextEndButtonRect: LayoutRect;
 	/** 起動時Mode Selectionの中央panel領域です。 */
 	readonly modeSelectionOverlayRect: LayoutRect;
 	/** Mode SelectionのVs CPU開始タッチ領域です。 */
@@ -195,30 +197,36 @@ export class ResponsiveLayout {
 		const contentWidth: number = this.hudRect.width - this.margin * 2;
 		this.scoreRect = new LayoutRect(contentX, 24, contentWidth, 52);
 		this.turnRect = new LayoutRect(contentX, 92, contentWidth, 82);
-		this.progressRect = new LayoutRect(contentX, 190, contentWidth, 76);
-		this.stoneStatusRect = new LayoutRect(contentX, 286, contentWidth, 116);
+		this.progressRect = new LayoutRect(contentX, 218, contentWidth, 76);
+		this.stoneStatusRect = new LayoutRect(contentX, 310, contentWidth, 116);
 		const buttonGap: number = 12;
 		const buttonWidth: number = (contentWidth - buttonGap * 2) / 3;
 		const buttonHeight: number = compact ? 80 : 72;
-		this.predictionButtonRect = new LayoutRect(contentX, 438, buttonWidth, buttonHeight);
-		this.trailsButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 438, buttonWidth, buttonHeight);
-		this.rulesButtonRect = new LayoutRect(contentX + (buttonWidth + buttonGap) * 2, 438, buttonWidth, buttonHeight);
+		this.predictionButtonRect = new LayoutRect(contentX, 456, buttonWidth, buttonHeight);
+		this.trailsButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 456, buttonWidth, buttonHeight);
+		this.rulesButtonRect = new LayoutRect(contentX + (buttonWidth + buttonGap) * 2, 456, buttonWidth, buttonHeight);
 		this.resultOverlayRect = new LayoutRect(
-			this.boardRect.x + (this.boardRect.width - 580) / 2,
-			this.boardRect.y + (this.boardRect.height - 340) / 2,
-			580,
-			340
+			this.boardRect.x + (this.boardRect.width - 620) / 2,
+			this.boardRect.y + (this.boardRect.height - 500) / 2,
+			620,
+			500
 		);
 		this.rematchButtonRect = new LayoutRect(
-			this.resultOverlayRect.x + 35,
-			this.resultOverlayRect.y + 225,
-			240,
+			this.resultOverlayRect.x + 45,
+			this.resultOverlayRect.y + 390,
+			250,
 			80
 		);
 		this.changeModeButtonRect = new LayoutRect(
-			this.resultOverlayRect.x + 305,
-			this.resultOverlayRect.y + 225,
-			240,
+			this.resultOverlayRect.x + 325,
+			this.resultOverlayRect.y + 390,
+			250,
+			80
+		);
+		this.nextEndButtonRect = new LayoutRect(
+			this.resultOverlayRect.x + 180,
+			this.resultOverlayRect.y + 390,
+			260,
 			80
 		);
 		this.modeSelectionOverlayRect = new LayoutRect(160, 50, logicalWidth - 320, logicalHeight - 100);

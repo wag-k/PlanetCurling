@@ -103,6 +103,13 @@ function main(_param) {
         hud.changeModeButton.onPointDown.add(function () {
             rulesGate.runHumanInput(function () { return modeSelection.show(); });
         });
+        hud.nextEndButton.onPointDown.add(function () {
+            rulesGate.runHumanInput(function () {
+                cpuTurnController.reset();
+                if (universe.completeEndTransition())
+                    rebuildPlanetViews();
+            });
+        });
         hud.predictionButton.onPointDown.add(function () {
             rulesGate.runHumanInput(function () { return renderer.trajectoryVisibility.togglePrediction(); });
         });

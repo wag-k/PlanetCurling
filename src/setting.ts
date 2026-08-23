@@ -59,9 +59,14 @@ export class Setting {
 		return 4;
 	}
 
-	/** RedとBlueがそれぞれ投げる回数です。 */
-	static get ShotsPerPlayer(): number {
+	/** 1つのEndでRedとBlueがそれぞれ投げる回数です。 */
+	static get ShotsPerPlayerPerEnd(): number {
 		return 3;
+	}
+
+	/** 1試合で行うEnd数です。Endごとに先手を交代します。 */
+	static get EndsPerMatch(): number {
+		return 2;
 	}
 
 	/** ドラッグ速度の換算にだけ使う従来互換の基準時間（30日）です。物理dtとは独立しています。 */

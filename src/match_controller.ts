@@ -13,19 +13,50 @@ export enum Player {
 	Blue = "Blue"
 }
 
-/** 照準・物理進行・ターン切替・終了を明確に分ける試合状態です。 */
+/** 照準・物理進行・Turn切替・End切替・終了を明確に分ける試合状態です。 */
 export enum MatchState {
 	Aiming = "Aiming",
 	Simulating = "Simulating",
 	TurnTransition = "TurnTransition",
+	/** End得点を確定済みの盤面を表示し、次End開始操作を待つ状態です。 */
+	EndTransition = "EndTransition",
 	MatchFinished = "MatchFinished"
 }
 
-/** 6投終了時の赤勝利・青勝利・引き分けを表します。 */
+/** 全End合計得点による赤勝利・青勝利・引き分けを表します。 */
 export enum MatchResult {
 	RedWin = "RedWin",
 	BlueWin = "BlueWin",
 	Draw = "Draw"
+}
+
+/** 1つのEnd終了時に確定し、後続Endの物理から独立して残る純粋な成績です。 */
+export class EndResult {
+	/** 1始まりのEnd番号です。 */
+	readonly endNumber: number;
+	/** このEndの第1投を担当したプレイヤーです。 */
+	readonly startingPlayer: Player;
+	/** このEndの第6投を担当したプレイヤーです。 */
+	readonly lastPlayer: Player;
+	/** End終了時に固定したRed得点です。 */
+	readonly redScore: number;
+	/** End終了時に固定したBlue得点です。 */
+	readonly blueScore: number;
+
+	/** End単位の先後と確定得点を、PhysicsWorldを参照しない履歴として生成します。 */
+	constructor(
+		endNumber: number,
+		startingPlayer: Player,
+		lastPlayer: Player,
+		redScore: number,
+		blueScore: number
+	) {
+		this.endNumber = endNumber;
+		this.startingPlayer = startingPlayer;
+		this.lastPlayer = lastPlayer;
+		this.redScore = redScore;
+		this.blueScore = blueScore;
+	}
 }
 
 /** 投球駒が物理世界へ参加中か、中央天体へ吸収済みかを表します。 */
@@ -65,7 +96,7 @@ export class CurlingStone {
 	/** この駒を投げるプレイヤーです。 */
 	readonly owner: Player;
 
-	/** 所有プレイヤーにとって何投目かを表す1始まりの番号です。 */
+	/** 所有プレイヤーにとって現在Endの何投目かを表す1始まりの番号です。 */
 	readonly shotNumber: number;
 
 	/** Newton重力と積分器が扱う純粋な物理天体です。 */
@@ -168,7 +199,7 @@ export class MatchController {
 	/** 物理世界を6時間固定dtで進める既存実行器です。 */
 	readonly simulationRunner: SimulationRunner;
 
-	/** 生成済みの投球駒です。過去の駒も重力源として保持します。 */
+	/** 現在Endで生成済みの投球駒です。同じEndの過去の駒も重力源として保持します。 */
 	readonly stones: CurlingStone[] = [];
 
 	/** リリース済み投球駒を現在の物理状態から採点する評価器です。 */
@@ -186,20 +217,23 @@ export class MatchController {
 	/** 固定物体化せずPhysicsWorldへ登録する中央天体です。 */
 	private currentCentralBody: Planet;
 
-	/** Redがリリース済みの投球数です。 */
-	private redCompletedShots: number = 0;
+	/** 現在Endの1始まり番号です。Match全体の進行と盤面寿命を区切ります。 */
+	private currentEndNumberValue: number = 1;
 
-	/** Blueがリリース済みの投球数です。 */
-	private blueCompletedShots: number = 0;
+	/** 現在Endの第1投を担当するプレイヤーです。End 1はRed、End 2はBlueです。 */
+	private currentEndStartingPlayerValue: Player = Player.Red;
+
+	/** 現在End内でRedがリリース済みの投球数です。過去End分は含みません。 */
+	private redCompletedShotsInCurrentEnd: number = 0;
+
+	/** 現在End内でBlueがリリース済みの投球数です。過去End分は含みません。 */
+	private blueCompletedShotsInCurrentEnd: number = 0;
+
+	/** 終了済みEndの先後と得点を、現在PhysicsWorldから独立して保持します。 */
+	private readonly completedEndResults: EndResult[] = [];
 
 	/** 現在の投球で完了した固定物理ステップ相当のゲーム内時間（s）です。 */
 	private shotSimulationElapsedSeconds: number = 0;
-
-	/** 試合終了時に確定したRedの得点です。終了前は存在しません。 */
-	private confirmedRedScore: number | undefined;
-
-	/** 試合終了時に確定したBlueの得点です。終了前は存在しません。 */
-	private confirmedBlueScore: number | undefined;
 
 	/** 試合終了時に確定した勝敗です。終了前は存在しません。 */
 	private confirmedResult: MatchResult | undefined;
@@ -234,29 +268,49 @@ export class MatchController {
 		return this.currentTurnPlayer;
 	}
 
-	/** Redのリリース済み投球数を返します。 */
-	get redShotCount(): number {
-		return this.redCompletedShots;
+	/** 現在の1始まりEnd番号を返します。 */
+	get currentEndNumber(): number {
+		return this.currentEndNumberValue;
 	}
 
-	/** Blueのリリース済み投球数を返します。 */
-	get blueShotCount(): number {
-		return this.blueCompletedShots;
+	/** 現在Endの先手を返します。End内のcurrentPlayerとは別の固定値です。 */
+	get currentEndStartingPlayer(): Player {
+		return this.currentEndStartingPlayerValue;
 	}
 
-	/** 全プレイヤーのリリース済み投球数を返します。 */
-	get totalCompletedShots(): number {
-		return this.redCompletedShots + this.blueCompletedShots;
+	/** 現在End内でRedがリリース済みの投球数を返します。 */
+	get redCompletedShotsThisEnd(): number {
+		return this.redCompletedShotsInCurrentEnd;
 	}
 
-	/** 1人あたりの最大投球数を返します。 */
-	get shotsPerPlayer(): number {
-		return Setting.ShotsPerPlayer;
+	/** 現在End内でBlueがリリース済みの投球数を返します。 */
+	get blueCompletedShotsThisEnd(): number {
+		return this.blueCompletedShotsInCurrentEnd;
 	}
 
-	/** 試合全体の最大投球数を返します。 */
-	get maximumTotalShots(): number {
-		return Setting.ShotsPerPlayer * 2;
+	/** 現在End内で両プレイヤーが完了した投球数を返します。 */
+	get completedShotsInCurrentEnd(): number {
+		return this.redCompletedShotsInCurrentEnd + this.blueCompletedShotsInCurrentEnd;
+	}
+
+	/** 1人が1つのEndで投げる最大投球数を返します。 */
+	get shotsPerPlayerPerEnd(): number {
+		return Setting.ShotsPerPlayerPerEnd;
+	}
+
+	/** 1つのEndで両プレイヤーが投げる最大投球数を返します。 */
+	get maximumShotsPerEnd(): number {
+		return Setting.ShotsPerPlayerPerEnd * 2;
+	}
+
+	/** 1試合で行うEnd数を返します。 */
+	get endsPerMatch(): number {
+		return Setting.EndsPerMatch;
+	}
+
+	/** 終了済みEndの確定履歴を呼び出し側から変更できない配列で返します。 */
+	get endResults(): EndResult[] {
+		return this.completedEndResults.slice();
 	}
 
 	/** 現在の投球で固定ステップにより進んだゲーム内時間（s）を返します。 */
@@ -264,18 +318,28 @@ export class MatchController {
 		return this.shotSimulationElapsedSeconds;
 	}
 
-	/** Redの暫定得点、または試合終了時に確定した得点を返します。 */
-	get redScore(): number {
-		return this.confirmedRedScore === undefined
-			? this.calculatePlayerScore(Player.Red)
-			: this.confirmedRedScore;
+	/** 現在PhysicsWorldだけから再計算するRedの暫定End得点を返します。 */
+	get currentEndRedScore(): number {
+		return this.calculatePlayerScore(Player.Red);
 	}
 
-	/** Blueの暫定得点、または試合終了時に確定した得点を返します。 */
-	get blueScore(): number {
-		return this.confirmedBlueScore === undefined
-			? this.calculatePlayerScore(Player.Blue)
-			: this.confirmedBlueScore;
+	/** 現在PhysicsWorldだけから再計算するBlueの暫定End得点を返します。 */
+	get currentEndBlueScore(): number {
+		return this.calculatePlayerScore(Player.Blue);
+	}
+
+	/** 終了済みEndResultだけを合計したRedのMatch Totalを返します。 */
+	get totalRedScore(): number {
+		return this.completedEndResults.reduce(
+			(total: number, endResult: EndResult): number => total + endResult.redScore, 0
+		);
+	}
+
+	/** 終了済みEndResultだけを合計したBlueのMatch Totalを返します。 */
+	get totalBlueScore(): number {
+		return this.completedEndResults.reduce(
+			(total: number, endResult: EndResult): number => total + endResult.blueScore, 0
+		);
 	}
 
 	/** 試合終了時に確定した勝敗を返します。終了前はundefinedです。 */
@@ -312,21 +376,21 @@ export class MatchController {
 	/** 表示用に、現在プレイヤーがこれから投げる番号を返します。 */
 	getCurrentPlayerShotNumber(): number {
 		if (this.currentState === MatchState.MatchFinished) {
-			return Setting.ShotsPerPlayer;
+			return Setting.ShotsPerPlayerPerEnd;
 		}
 		return this.currentState === MatchState.Aiming
 			? this.getCompletedShots(this.currentPlayer) + 1
 			: this.getCompletedShots(this.currentPlayer);
 	}
 
-	/** 表示用に、現在進行中の総投球番号を1始まりで返します。 */
-	getCurrentTotalShotNumber(): number {
+	/** 表示用に、現在End内で進行中の総投球番号を1始まりで返します。 */
+	getCurrentEndShotNumber(): number {
 		if (this.currentState === MatchState.MatchFinished) {
-			return this.maximumTotalShots;
+			return this.maximumShotsPerEnd;
 		}
 		return this.currentState === MatchState.Aiming
-			? this.totalCompletedShots + 1
-			: this.totalCompletedShots;
+			? this.completedShotsInCurrentEnd + 1
+			: this.completedShotsInCurrentEnd;
 	}
 
 	/**
@@ -358,9 +422,9 @@ export class MatchController {
 		}
 		this.currentActiveStone.markReleased();
 		if (this.currentActiveStone.owner === Player.Red) {
-			this.redCompletedShots += 1;
+			this.redCompletedShotsInCurrentEnd += 1;
 		} else {
-			this.blueCompletedShots += 1;
+			this.blueCompletedShotsInCurrentEnd += 1;
 		}
 		this.currentActiveStone = undefined;
 		this.shotSimulationElapsedSeconds = 0;
@@ -396,9 +460,14 @@ export class MatchController {
 
 		if (this.shotSimulationElapsedSeconds >= Setting.SimulationDurationPerShotSeconds) {
 			this.shotSimulationElapsedSeconds = Setting.SimulationDurationPerShotSeconds;
-			if (this.totalCompletedShots >= this.maximumTotalShots) {
-				this.confirmMatchResult();
-				this.currentState = MatchState.MatchFinished;
+			if (this.completedShotsInCurrentEnd >= this.maximumShotsPerEnd) {
+				this.confirmCurrentEndResult();
+				if (this.currentEndNumber >= this.endsPerMatch) {
+					this.confirmMatchResult();
+					this.currentState = MatchState.MatchFinished;
+				} else {
+					this.currentState = MatchState.EndTransition;
+				}
 			} else {
 				this.currentState = MatchState.TurnTransition;
 			}
@@ -416,18 +485,36 @@ export class MatchController {
 		return true;
 	}
 
-	/** すべての投球駒と物理時間を破棄し、中央天体とRedの1投目を再生成します。 */
+	/** EndTransitionを完了し、過去盤面を破棄して先手を交代した新しいEndを開始します。 */
+	completeEndTransition(): boolean {
+		if (this.currentState !== MatchState.EndTransition) {
+			return false;
+		}
+		this.currentEndNumberValue += 1;
+		this.currentEndStartingPlayerValue = this.getStartingPlayerForEnd(this.currentEndNumberValue);
+		this.resetCurrentEndBoard();
+		return true;
+	}
+
+	/** 全End履歴と盤面を破棄し、End 1・Red先手の新しい試合を開始します。 */
 	newGame(): void {
+		this.currentEndNumberValue = 1;
+		this.currentEndStartingPlayerValue = Player.Red;
+		this.completedEndResults.splice(0, this.completedEndResults.length);
+		this.confirmedResult = undefined;
+		this.resetCurrentEndBoard();
+	}
+
+	/** 現在EndのStone・軌跡・衝突参照・中央天体を破棄し、完全な初期盤面を生成します。 */
+	private resetCurrentEndBoard(): void {
 		this.simulationRunner.world.clearBodies();
 		this.simulationRunner.reset();
 		this.stones.splice(0, this.stones.length);
-		this.redCompletedShots = 0;
-		this.blueCompletedShots = 0;
-		this.currentTurnPlayer = Player.Red;
+		this.redCompletedShotsInCurrentEnd = 0;
+		this.blueCompletedShotsInCurrentEnd = 0;
+		this.currentTurnPlayer = this.currentEndStartingPlayerValue;
+		this.currentActiveStone = undefined;
 		this.shotSimulationElapsedSeconds = 0;
-		this.confirmedRedScore = undefined;
-		this.confirmedBlueScore = undefined;
-		this.confirmedResult = undefined;
 		this.pendingCollisionEvents.splice(0, this.pendingCollisionEvents.length);
 		this.currentCentralBody = this.createCentralBody();
 		this.simulationRunner.world.addBody(this.currentCentralBody);
@@ -443,7 +530,9 @@ export class MatchController {
 
 	/** 指定プレイヤーのリリース済み投球数を返します。 */
 	private getCompletedShots(player: Player): number {
-		return player === Player.Red ? this.redCompletedShots : this.blueCompletedShots;
+		return player === Player.Red
+			? this.redCompletedShotsInCurrentEnd
+			: this.blueCompletedShotsInCurrentEnd;
 	}
 
 	/** 現在の中心天体に対して、指定プレイヤーのリリース済み投球だけを合計します。 */
@@ -483,17 +572,31 @@ export class MatchController {
 		});
 	}
 
-	/** 6投終了時の得点を固定し、Red勝利・Blue勝利・引き分けを決定します。 */
+	/** 現在Endの6投終了時に盤面得点を固定し、物理から独立したEndResultへ追加します。 */
+	private confirmCurrentEndResult(): void {
+		this.completedEndResults.push(new EndResult(
+			this.currentEndNumber,
+			this.currentEndStartingPlayer,
+			this.currentTurnPlayer,
+			this.calculatePlayerScore(Player.Red),
+			this.calculatePlayerScore(Player.Blue)
+		));
+	}
+
+	/** 全End確定後のMatch TotalからRed勝利・Blue勝利・引き分けを決定します。 */
 	private confirmMatchResult(): void {
-		this.confirmedRedScore = this.calculatePlayerScore(Player.Red);
-		this.confirmedBlueScore = this.calculatePlayerScore(Player.Blue);
-		if (this.confirmedRedScore > this.confirmedBlueScore) {
+		if (this.totalRedScore > this.totalBlueScore) {
 			this.confirmedResult = MatchResult.RedWin;
-		} else if (this.confirmedBlueScore > this.confirmedRedScore) {
+		} else if (this.totalBlueScore > this.totalRedScore) {
 			this.confirmedResult = MatchResult.BlueWin;
 		} else {
 			this.confirmedResult = MatchResult.Draw;
 		}
+	}
+
+	/** 1始まりEnd番号に対応し、奇数EndはRed、偶数EndはBlueを先手として返します。 */
+	private getStartingPlayerForEnd(endNumber: number): Player {
+		return endNumber % 2 === 1 ? Player.Red : Player.Blue;
 	}
 
 	/** 現在プレイヤーの新しい駒を物理世界へ追加し、照準を開始します。 */

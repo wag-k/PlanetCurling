@@ -103,6 +103,15 @@ export class Universe {
 		this.refreshAccelerations();
 	}
 
+	/** EndTransitionを完了し、予測cacheを消して新しい中央天体と先手Stoneの加速度を同期します。 */
+	completeEndTransition(): boolean {
+		const completed: boolean = this.matchController.completeEndTransition();
+		if (!completed) return false;
+		this.clearPredictionCache();
+		this.refreshAccelerations();
+		return true;
+	}
+
 	/** 現在位置のNewton重力加速度を全Planetへ同期し、照準中の表示に利用します。 */
 	private refreshAccelerations(): void {
 		const bodies: Planet[] = this.matchController.simulationRunner.world.bodies;

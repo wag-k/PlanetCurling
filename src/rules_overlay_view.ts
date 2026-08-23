@@ -2,7 +2,7 @@ import {LayoutRect, ResponsiveLayout} from "./responsive_layout";
 import {RuleLine, RuleLineStyle, RuleSection} from "./rules_content";
 import {RulesOverlayState} from "./rules_state";
 
-/** Mode SelectionとGame HUDが共有する3ページのAkashic Rules Overlayです。 */
+/** Mode SelectionとGame HUDが共有する複数ページのAkashic Rules Overlayです。 */
 export class RulesOverlayView {
 	/** 全画面背景を含み、背面へpoint eventを通さない最前面rootです。 */
 	readonly entity: g.E;
@@ -18,7 +18,7 @@ export class RulesOverlayView {
 	private readonly layout: ResponsiveLayout;
 	/** Page titleを表示するlabelです。 */
 	private readonly titleLabel: g.Label;
-	/** `1 / 3`形式の現在page labelです。 */
+	/** `1 / 4`形式の現在page labelです。 */
 	private readonly pageIndicatorLabel: g.Label;
 	/** PREV buttonのlabelです。 */
 	private readonly previousLabel: g.Label;

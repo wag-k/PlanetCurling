@@ -111,12 +111,13 @@ function allRulesText(content: RulesContent): string[] {
 	return lines;
 }
 
-describe("G6.1 Rules content and navigation", (): void => {
-	it("Goal / Play / Tacticsの3ページを定義する", (): void => {
+describe("G6.2 Rules content and navigation", (): void => {
+	it("Match Format / Goal / Play / Tacticsの4ページを定義する", (): void => {
 		const content: RulesContent = RulesContent.createDefault();
 
-		expect(content.pages.length).toBe(3);
+		expect(content.pages.length).toBe(4);
 		expect(content.pages.map((page): string => page.title)).toEqual([
+			"MATCH FORMAT",
 			"GOAL & SCORE",
 			"HOW TO PLAY",
 			"COLLISIONS & TACTICS"
@@ -134,10 +135,22 @@ describe("G6.1 Rules content and navigation", (): void => {
 		state.moveNext();
 		expect(state.pageIndex).toBe(2);
 		state.moveNext();
-		expect(state.pageIndex).toBe(2);
+		expect(state.pageIndex).toBe(3);
+		state.moveNext();
+		expect(state.pageIndex).toBe(3);
 		state.movePrevious();
-		expect(state.pageIndex).toBe(1);
-		expect(state.pageIndicator).toBe("2 / 3");
+		expect(state.pageIndex).toBe(2);
+		expect(state.pageIndicator).toBe("3 / 4");
+	});
+
+	it("2 End・各3投・先後交代・盤面reset・合計得点を説明する", (): void => {
+		const lines: string[] = allRulesText(RulesContent.createDefault());
+
+		expect(lines).toContain("Each player throws 3 planets per End.");
+		expect(lines).toContain("END 1: RED STARTS. BLUE HAS THE FINAL SHOT.");
+		expect(lines).toContain("END 2: BLUE STARTS. RED HAS THE FINAL SHOT.");
+		expect(lines).toContain("The board resets between Ends.");
+		expect(lines).toContain("Scores from both Ends are added together.");
 	});
 
 	it("得点詳細を現在のOrbitScoreEvaluator / GameBalance / Settingから生成する", (): void => {

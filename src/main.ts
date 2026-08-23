@@ -134,6 +134,12 @@ function main(_param: g.GameMainParameterObject): void {
 		hud.changeModeButton.onPointDown.add((): void => {
 			rulesGate.runHumanInput((): void => modeSelection.show());
 		});
+		hud.nextEndButton.onPointDown.add((): void => {
+			rulesGate.runHumanInput((): void => {
+				cpuTurnController.reset();
+				if (universe.completeEndTransition()) rebuildPlanetViews();
+			});
+		});
 		hud.predictionButton.onPointDown.add((): void => {
 			rulesGate.runHumanInput((): void => renderer.trajectoryVisibility.togglePrediction());
 		});

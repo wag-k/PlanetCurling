@@ -107,6 +107,7 @@ describe("ResponsiveLayout", (): void => {
 		expect(layout.boardRect.contains(layout.resultOverlayRect)).toBe(true);
 		expect(layout.resultOverlayRect.contains(layout.rematchButtonRect)).toBe(true);
 		expect(layout.resultOverlayRect.contains(layout.changeModeButtonRect)).toBe(true);
+		expect(layout.resultOverlayRect.contains(layout.nextEndButtonRect)).toBe(true);
 		expect(layout.screenRect.contains(layout.modeSelectionOverlayRect)).toBe(true);
 		expect(layout.modeSelectionOverlayRect.contains(layout.vsCpuButtonRect)).toBe(true);
 		expect(layout.modeSelectionOverlayRect.contains(layout.easyDifficultyButtonRect)).toBe(true);

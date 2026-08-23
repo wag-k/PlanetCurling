@@ -2,7 +2,7 @@ import {CpuTurnController, CpuTurnState} from "./cpu_turn_controller";
 import {formatMatchResultForMode, TrajectoryVisibility} from "./game_presentation";
 import {formatCpuDifficulty, GameMode, GameSessionConfig} from "./game_session";
 import {
-	CurlingStone, MatchController, MatchState, Player, StoneScoreStatus, StoneScoreStatusKind
+	CurlingStone, EndResult, MatchController, MatchState, Player, StoneScoreStatus, StoneScoreStatusKind
 } from "./match_controller";
 import {calculateCurrentLayout, LayoutMode, LayoutRect, ResponsiveLayout} from "./responsive_layout";
 import {Setting} from "./setting";
@@ -15,6 +15,8 @@ export class GameHudView {
 	readonly rematchButton: g.FilledRect;
 	/** 結果画面から起動時Mode Selectionへ戻る大型buttonです。 */
 	readonly changeModeButton: g.FilledRect;
+	/** EndTransitionから先後を交代した次Endへ進む大型buttonです。 */
+	readonly nextEndButton: g.FilledRect;
 	/** Prediction表示toggleに利用する大型buttonです。 */
 	readonly predictionButton: g.FilledRect;
 	/** Trails表示toggleに利用する大型buttonです。 */
@@ -68,14 +70,20 @@ export class GameHudView {
 			width: layout.hudRect.width,
 			height: layout.hudRect.height
 		}));
+		this.addLabel(scene, font, "totalTitle", 18,
+			layout.scoreRect.x, layout.scoreRect.y - 8, "#cfd8dc");
 		this.addLabel(scene, font, "redScore", layout.scoreFontSize,
-			layout.scoreRect.x, layout.scoreRect.y, "#ff6b6b");
+			layout.scoreRect.x, layout.scoreRect.y + 18, "#ff6b6b");
 		this.addLabel(scene, font, "blueScore", layout.scoreFontSize,
-			layout.scoreRect.x + layout.scoreRect.width / 2, layout.scoreRect.y, "#64b5f6");
+			layout.scoreRect.x + layout.scoreRect.width / 2, layout.scoreRect.y + 18, "#64b5f6");
+		this.addLabel(scene, font, "end", layout.bodyFontSize,
+			layout.turnRect.x, layout.turnRect.y - 8, "#b3e5fc");
+		this.addLabel(scene, font, "currentScore", 20,
+			layout.turnRect.x, layout.turnRect.y + 22, "#cfd8dc");
 		this.addLabel(scene, font, "turn", layout.turnFontSize,
-			layout.turnRect.x, layout.turnRect.y, "white");
+			layout.turnRect.x, layout.turnRect.y + 50, "white");
 		this.addLabel(scene, font, "shot", layout.bodyFontSize,
-			layout.turnRect.x, layout.turnRect.y + 42, "white");
+			layout.turnRect.x, layout.turnRect.y + 90, "white");
 		this.addLabel(scene, font, "progress", layout.bodyFontSize,
 			layout.progressRect.x, layout.progressRect.y, "#b3e5fc");
 		this.addLabel(scene, font, "progressBar", layout.bodyFontSize,
@@ -99,12 +107,21 @@ export class GameHudView {
 			width: layout.resultOverlayRect.width,
 			height: layout.resultOverlayRect.height
 		});
-		this.addLabel(scene, font, "result", 42,
-			layout.resultOverlayRect.x + 155, layout.resultOverlayRect.y + 42, "white");
-		this.addLabel(scene, font, "finalScore", 30,
-			layout.resultOverlayRect.x + 118, layout.resultOverlayRect.y + 118, "white");
+		this.addLabel(scene, font, "result", 38,
+			layout.resultOverlayRect.x + 120, layout.resultOverlayRect.y + 28, "white");
+		this.addLabel(scene, font, "finalScore", 27,
+			layout.resultOverlayRect.x + 105, layout.resultOverlayRect.y + 92, "white");
+		this.addLabel(scene, font, "end1Score", 25,
+			layout.resultOverlayRect.x + 105, layout.resultOverlayRect.y + 145, "#cfd8dc");
+		this.addLabel(scene, font, "end2Score", 25,
+			layout.resultOverlayRect.x + 105, layout.resultOverlayRect.y + 190, "#cfd8dc");
+		this.addLabel(scene, font, "matchTotal", 28,
+			layout.resultOverlayRect.x + 105, layout.resultOverlayRect.y + 245, "#ffffff");
+		this.addLabel(scene, font, "nextStart", 27,
+			layout.resultOverlayRect.x + 120, layout.resultOverlayRect.y + 310, "#80d8ff");
 		this.rematchButton = this.addButton(scene, font, layout.rematchButtonRect, "rematch");
 		this.changeModeButton = this.addButton(scene, font, layout.changeModeButtonRect, "changeMode");
+		this.nextEndButton = this.addButton(scene, font, layout.nextEndButtonRect, "nextEnd");
 		this.turnOverlay = new g.Label({
 			scene: scene,
 			parent: this.entity,
@@ -121,12 +138,17 @@ export class GameHudView {
 	/** 毎frame呼べますが、文字列が変化したlabelだけをinvalidateします。 */
 	update(): void {
 		const player: string = this.controller.currentPlayer === Player.Red ? "RED" : "BLUE";
-		this.setText("redScore", "RED  " + this.controller.redScore);
-		this.setText("blueScore", "BLUE  " + this.controller.blueScore);
+		this.setText("totalTitle", "MATCH TOTAL (completed Ends)");
+		this.setText("redScore", "RED  " + this.controller.totalRedScore);
+		this.setText("blueScore", "BLUE  " + this.controller.totalBlueScore);
+		this.setText("end", "END " + this.controller.currentEndNumber + " / " + this.controller.endsPerMatch);
+		this.setText("currentScore", "CURRENT END   RED " + this.controller.currentEndRedScore
+			+ " - " + this.controller.currentEndBlueScore + " BLUE");
 		this.setText("turn", this.sessionConfig.gameMode === GameMode.VsCpu
 			&& this.controller.currentPlayer === Player.Blue ? "BLUE CPU" : player + " TURN");
-		this.setText("shot", "Shot " + this.controller.getCurrentPlayerShotNumber() + " / " + this.controller.shotsPerPlayer
-			+ "   Total " + this.controller.getCurrentTotalShotNumber() + " / " + this.controller.maximumTotalShots);
+		this.setText("shot", "Shot " + this.controller.getCurrentPlayerShotNumber()
+			+ " / " + this.controller.shotsPerPlayerPerEnd
+			+ "   End throw " + this.controller.getCurrentEndShotNumber() + " / " + this.controller.maximumShotsPerEnd);
 		const years: number = this.controller.currentShotSimulationElapsedSeconds / Setting.SecondsPerYear;
 		let progressText: string;
 		let progressRatio: number;
@@ -157,6 +179,7 @@ export class GameHudView {
 		this.setText("rules", "RULES");
 		this.setText("rematch", "REMATCH");
 		this.setText("changeMode", "CHANGE MODE");
+		this.setText("nextEnd", "NEXT END");
 		this.updateResultOverlay();
 		this.updateTurnOverlay(player);
 	}
@@ -164,7 +187,7 @@ export class GameHudView {
 	/** 指定playerの3 Stoneを `R1 3 / R2 ABS / R3 -` 形式へ変換します。 */
 	private formatStones(player: Player, prefix: string): string {
 		const values: string[] = [];
-		for (let shot: number = 1; shot <= this.controller.shotsPerPlayer; shot += 1) {
+		for (let shot: number = 1; shot <= this.controller.shotsPerPlayerPerEnd; shot += 1) {
 			const stone: CurlingStone | undefined = this.controller.stones.filter(
 				(value: CurlingStone): boolean => value.owner === player && value.shotNumber === shot
 			)[0];
@@ -181,30 +204,70 @@ export class GameHudView {
 		return String(status.points);
 	}
 
-	/** MatchFinished時だけ盤面を残した中央結果overlayとRematchを表示します。 */
+	/** EndTransitionでは中間成績、MatchFinishedではEnd別最終成績と操作を表示します。 */
 	private updateResultOverlay(): void {
-		const visible: boolean = this.controller.state === MatchState.MatchFinished && this.controller.result !== undefined;
-		if (visible) {
-			this.resultOverlay.show();
-			this.rematchButton.show();
-			this.labels.result.show();
-			this.labels.finalScore.show();
-			this.labels.rematch.show();
-			this.changeModeButton.show();
-			this.labels.changeMode.show();
-			this.setText("result", formatMatchResultForMode(this.controller.result!, this.sessionConfig.gameMode));
-			this.setText("finalScore", this.sessionConfig.gameMode === GameMode.VsCpu
-				? "YOU " + this.controller.redScore + " - " + this.controller.blueScore + " CPU"
-				: "RED " + this.controller.redScore + " - " + this.controller.blueScore + " BLUE");
-		} else {
-			this.resultOverlay.hide();
+		if (this.controller.state === MatchState.EndTransition) {
+			const completed: EndResult = this.controller.endResults[this.controller.endResults.length - 1];
+			this.showResultLabels();
+			this.setText("result", "END " + completed.endNumber + " COMPLETE");
+			this.setText("finalScore", "END SCORE   RED " + completed.redScore + " - " + completed.blueScore + " BLUE");
+			this.setText("end1Score", "MATCH TOTAL   RED " + this.controller.totalRedScore
+				+ " - " + this.controller.totalBlueScore + " BLUE");
+			this.labels.end2Score.hide();
+			this.labels.matchTotal.hide();
+			const nextStarter: string = this.controller.currentEndStartingPlayer === Player.Red ? "BLUE" : "RED";
+			this.setText("nextStart", "NEXT END   " + nextStarter + " STARTS");
+			this.labels.nextStart.show();
+			this.nextEndButton.show();
+			this.labels.nextEnd.show();
 			this.rematchButton.hide();
-			this.labels.result.hide();
-			this.labels.finalScore.hide();
 			this.labels.rematch.hide();
 			this.changeModeButton.hide();
 			this.labels.changeMode.hide();
+		} else if (this.controller.state === MatchState.MatchFinished && this.controller.result !== undefined) {
+			this.showResultLabels();
+			this.setText("result", formatMatchResultForMode(this.controller.result, this.sessionConfig.gameMode));
+			this.setText("finalScore", "                 RED     BLUE");
+			const first: EndResult = this.controller.endResults[0];
+			const second: EndResult = this.controller.endResults[1];
+			this.setText("end1Score", this.formatEndResult(first));
+			this.setText("end2Score", this.formatEndResult(second));
+			this.setText("matchTotal", "TOTAL          " + this.controller.totalRedScore
+				+ "          " + this.controller.totalBlueScore);
+			this.labels.end2Score.show();
+			this.labels.matchTotal.show();
+			this.labels.nextStart.hide();
+			this.nextEndButton.hide();
+			this.labels.nextEnd.hide();
+			this.rematchButton.show();
+			this.labels.rematch.show();
+			this.changeModeButton.show();
+			this.labels.changeMode.show();
+		} else {
+			this.resultOverlay.hide();
+			this.rematchButton.hide();
+			this.labels.rematch.hide();
+			this.changeModeButton.hide();
+			this.labels.changeMode.hide();
+			this.nextEndButton.hide();
+			this.labels.nextEnd.hide();
+			["result", "finalScore", "end1Score", "end2Score", "matchTotal", "nextStart"].forEach(
+				(key: string): void => this.labels[key].hide()
+			);
 		}
+	}
+
+	/** Result overlay背景と共通成績labelを表示します。 */
+	private showResultLabels(): void {
+		this.resultOverlay.show();
+		this.labels.result.show();
+		this.labels.finalScore.show();
+		this.labels.end1Score.show();
+	}
+
+	/** 確定End得点を最終表の1行へ変換します。 */
+	private formatEndResult(result: EndResult): string {
+		return "END " + result.endNumber + "          " + result.redScore + "          " + result.blueScore;
 	}
 
 	/** 新しいAiming Stoneへ切り替わった時だけ約0.5秒のturn overlayを開始します。 */
@@ -212,7 +275,8 @@ export class GameHudView {
 		if (this.controller.activeStone !== undefined && this.controller.activeStone !== this.lastActiveStone) {
 			this.lastActiveStone = this.controller.activeStone;
 			this.turnOverlayFrames = 15;
-			this.turnOverlay.text = player + " TURN";
+			this.turnOverlay.text = this.controller.completedShotsInCurrentEnd === 0
+				? player + " STARTS" : player + " TURN";
 			this.turnOverlay.invalidate();
 		}
 		if (this.turnOverlayFrames > 0) {

@@ -80,6 +80,22 @@ function createBlueTurnController(): MatchController {
 	return controller;
 }
 
+/** End 1を6投完了し、Blue先手のEnd 2 Aimingへ進めます。 */
+function createSecondEndController(): MatchController {
+	const controller: MatchController = new MatchController(new SimulationRunner(
+		new PhysicsWorld(), noOpIntegrator(), Setting.PhysicsStepSeconds
+	));
+	controller.simulationRunner.setCollisionSystem(undefined);
+	for (let shotIndex: number = 0; shotIndex < controller.maximumShotsPerEnd; shotIndex += 1) {
+		controller.releaseActiveStone();
+		controller.advanceSimulation(Setting.SimulationDurationPerShotSeconds);
+		if (shotIndex < controller.maximumShotsPerEnd - 1) controller.completeTurnTransition();
+	}
+	expect(controller.state).toBe(MatchState.EndTransition);
+	controller.completeEndTransition();
+	return controller;
+}
+
 /** 予測とreleaseへ渡す固定best候補を生成します。 */
 function createBestResult(): CpuCandidateResult {
 	const shot: CpuShotCandidate = new CpuShotCandidate(100, 0, 100, 0, new Velocity(-10, 0));
@@ -154,7 +170,38 @@ describe("CpuTurnController", (): void => {
 		expect(matchController.state).toBe(MatchState.Aiming);
 		cpu.update();
 		expect(matchController.state).toBe(MatchState.Simulating);
-		expect(matchController.blueShotCount).toBe(1);
+		expect(matchController.blueCompletedShotsThisEnd).toBe(1);
 		expect(cpu.state).toBe(CpuTurnState.Idle);
+	});
+
+	it("End 2開始時はBlue CPUが先手として自動的にplanningを開始する", (): void => {
+		const matchController: MatchController = createSecondEndController();
+		const planner: ImmediateShotPlanner = new ImmediateShotPlanner(createBestResult());
+		const cpu: CpuTurnController = createCpuTurn(
+			new GameSessionConfig(GameMode.VsCpu, CpuDifficulty.Normal), matchController, planner
+		);
+
+		expect(matchController.currentEndNumber).toBe(2);
+		expect(matchController.currentPlayer).toBe(Player.Blue);
+		expect(cpu.isHumanStoneInputAllowed).toBe(false);
+		cpu.update();
+
+		expect(planner.startCount).toBe(1);
+		expect(cpu.state).toBe(CpuTurnState.Previewing);
+		expect(matchController.activeStone!.predictedTrajectory.length).toBeGreaterThan(0);
+	});
+
+	it("Local 2PのEnd 2 Blue先手ではCPUを開始せず人間入力を許可する", (): void => {
+		const matchController: MatchController = createSecondEndController();
+		const planner: ImmediateShotPlanner = new ImmediateShotPlanner(createBestResult());
+		const cpu: CpuTurnController = createCpuTurn(
+			new GameSessionConfig(GameMode.LocalTwoPlayer, CpuDifficulty.Normal), matchController, planner
+		);
+
+		cpu.update();
+
+		expect(planner.startCount).toBe(0);
+		expect(cpu.state).toBe(CpuTurnState.Idle);
+		expect(cpu.isHumanStoneInputAllowed).toBe(true);
 	});
 });

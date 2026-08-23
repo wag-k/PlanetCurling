@@ -1,6 +1,6 @@
 # PlanetCurling
 
-PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Phase G6.1では、Local 2PとCPU対戦に加え、READMEを開かずゲーム内でルールを確認できるHow to Play / Rules UIをPC、スマートフォン横持ち、タブレットで利用できます。
+PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Phase G6.2では、Local 2PとCPU対戦を2エンド制に拡張し、エンドごとの先後交代、盤面リセット、得点集計をPC、スマートフォン横持ち、タブレットで利用できます。
 
 ## 現在できること
 
@@ -8,14 +8,15 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 - Human=Red、CPU=BlueのVs CPU（Easy / Normal / Hard、Normal推奨）
 - 現在盤面のcloneを多数の候補初速度で10年進める、決定論的な1-ply物理探索AI
 - HumanとCPUで共通のNewton重力、6時間dt、Chronological Collision、吸収、得点ルール
-- 各プレイヤー3投、交互に合計6投するターン進行
+- 2エンド制（各エンドは各プレイヤー3投、1試合合計12投）
+- End 1はRed先手・Blue最終投、End 2はBlue先手・Red最終投
 - 現在ターンの惑星をドラッグして初速度を決める操作
 - 基準速度を1.5倍したドラッグ投球
 - 投球後に10ゲーム年だけ進み、照準中は停止する物理シミュレーション
 - 投球済み惑星を盤面とPhysicsWorldへ残す多体重力
 - 中心天体を追従する半径2 AUのターゲット軌道と位置得点帯
 - 相対位置と相対動径速度を使う0～3点の暫定採点（1人最大9点）
-- 6投終了時のRed勝利・Blue勝利・引き分け
+- エンド終了時の得点固定、エンド間の完全な盤面リセット、2エンド合計による勝敗
 - 本番と同じ多体重力・積分器・6時間dtによる10年先の軌道予測
 - 投球時の予測を残し、後続天体の重力によるズレを比較できる実軌跡
 - 6時間dtでもすり抜けを抑える連続円衝突判定と、質量差を考慮した投石同士の反発
@@ -24,7 +25,7 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 - 盤面と分離した右サイドHUD、表示toggle、結果overlay、Rematch
 - スマートフォン横持ちとタブレットへ拡縮するGitHub Pages版
 - activeStoneだけに有効な大型透明タッチ領域
-- 起動前の **HOW TO PLAY** とプレイ中の **RULES** から共有する3ページのルール説明
+- 起動前の **HOW TO PLAY** とプレイ中の **RULES** から共有する4ページのルール説明
 - Rules表示中のSimulation、Turn、CPU planning / preview、人間入力の一時停止と継続再開
 - 6時間の固定物理タイムステップ
 - Symplectic Euler / Velocity Verletの切り替え
@@ -41,9 +42,10 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 5. 投球後は物理世界が10ゲーム年進み、実際に通った経路が実線で延びます。
 6. Vs CPUのBlue turnでは候補を1frameに1件ずつ探索し、最善手の予測線を約0.5秒見せてから自動投球します。
 7. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
-8. RedとBlueが3投ずつ終えると得点を確定し、勝敗を表示します。
-9. **RULES** はプレイ中やCPU THINKING中にも開けます。**CLOSE** 後は同じ状態から再開します。
-10. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
+8. End 1でRedとBlueが3投ずつ終えると得点を固定します。**NEXT END** で盤面を初期化し、Blue先手のEnd 2を開始します。
+9. End 2も3投ずつ終えると、End 1とEnd 2の合計得点で勝敗を表示します。
+10. **RULES** はプレイ中やCPU THINKING中にも開けます。**CLOSE** 後は同じ状態から再開します。
+11. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
 
 照準中は物理時間が停止するため、過去の惑星は動きません。投球済み惑星は中央天体や後続の投球惑星と同じNewton重力の重力源になり、互いに衝突すると反発します。中央天体へ接触した投石だけは吸収され、物理世界と重力源から除外されて得点0になります。過去の惑星を再度ドラッグすることはできません。
 
@@ -79,12 +81,12 @@ src/
   cpu_simulation.ts       clone世界の10年候補simulation・盤面評価
   cpu_planner.ts          global / refinementのincremental探索
   cpu_turn_controller.ts  Blue CPUのplanning・preview・release接続
-  match_controller.ts     プレイヤー・駒・状態・ターン進行
+  match_controller.ts     プレイヤー・End成績・駒・状態・ターン進行
   orbit_score.ts          Akashic非依存の軌道評価と得点計算
   rendering.ts            物理モデルからSpriteへの同期
   responsive_layout.ts    盤面・HUD・touch targetの純粋レイアウト
   game_hud_view.ts        右サイドHUD・結果・orientation案内
-  rules_content.ts        3ページの翻訳可能なRules data
+  rules_content.ts        4ページの翻訳可能なRules data
   rules_state.ts          Page navigationとpause/input gate
   rules_overlay_view.ts   Mode Selection / HUD共通のRules描画
   input_velocity.ts       ドラッグ量から初速度への変換
@@ -168,7 +170,8 @@ GitHub Pagesの初回有効化と、CI成功をmerge条件にするRulesetの設
 - `Setting.PhysicsStepSeconds`: 物理計算1回の時間。初期値は6時間（21,600秒）
 - `Setting.SimulationSecondsPerSecond`: 実時間1秒あたりに進めるゲーム内時間。初期値は900日相当
 - `Setting.SimulationDurationPerShotSeconds`: 1投後に進める時間。365日基準の10年
-- `Setting.ShotsPerPlayer`: 各プレイヤーの投球数。現在は3投
+- `Setting.ShotsPerPlayerPerEnd`: 各プレイヤーが1エンドで投げる回数。現在は3投
+- `Setting.EndsPerMatch`: 1試合のエンド数。現在は2エンド
 - `Setting.IntegratorKind`: 使用する積分器
 - `Setting.InputVelocityReferenceSeconds`: ドラッグ速度換算の基準時間。物理dtとは独立
 - `Setting.LaunchVelocityMultiplier`: 基準発射速度へ最後に掛ける倍率。現在は1.5
@@ -226,14 +229,23 @@ Vs CPUではRedだけをHuman、BlueだけをCPUが操作します。CPUは最�
 
 ## Phase G6.1 How to Play / Rules UI
 
-起動時Mode Selectionの **HOW TO PLAY** とプレイ中HUDの **RULES** は、同じ`RulesOverlayView`を表示します。説明は次の3ページです。
+起動時Mode Selectionの **HOW TO PLAY** とプレイ中HUDの **RULES** は、同じ`RulesOverlayView`を表示します。説明は次の4ページです。
 
-1. **GOAL & SCORE** — 3投ずつの勝敗、0～3点、2 AU target、位置誤差と動径速度を使う得点詳細
-2. **HOW TO PLAY** — Drag / Arrow / Prediction / Release / 10年進行、残り続ける惑星と多体重力、点線と実線
-3. **COLLISIONS & TACTICS** — 衝突、Sun吸収、得点・防御・攻撃、Vs CPUの色と難易度
+1. **MATCH FORMAT** — 2エンド、各3投、エンドごとの先後、盤面リセット、Match Total
+2. **GOAL & SCORE** — 0～3点、2 AU target、位置誤差と動径速度を使う得点詳細
+3. **HOW TO PLAY** — Drag / Arrow / Prediction / Release / 10年進行、同一エンドに残る惑星と多体重力、点線と実線
+4. **COLLISIONS & TACTICS** — 衝突、Sun吸収、得点・防御・攻撃、Vs CPUの色と難易度
 
 得点の数値はRules側へ複製せず、`OrbitScoreEvaluator`、`GameBalance`、`Setting`、`PhysicalConstant`から表示文を生成します。**EVERY SHOT CHANGES THE GRAVITY FIELD.** を中心ルールとして明示しています。
 
 Rules表示中はApplication層の共通gateが`Universe.update()`と`CpuTurnController.update()`を呼ばず、Simulation、Turn Transition、CPU candidate evaluation、CPU preview countdownを停止します。Stone drag/release、Prediction/Trail toggle、Rematch、Change Modeも同じgateと全画面touchable背景でblockします。CLOSE後はMatchControllerやCpuPlanningSessionを作り直さず、その時点から継続します。
 
-`ResponsiveLayout`はRules panel、CLOSE、PREV、NEXT、page indicator、起動前/HUD buttonを1280×720論理画面内へ配置します。3ページ分割により、smartphone landscapeでも本文を極端に縮小しません。
+`ResponsiveLayout`はRules panel、CLOSE、PREV、NEXT、page indicator、起動前/HUD buttonを1280×720論理画面内へ配置します。4ページ分割により、smartphone landscapeでも本文を極端に縮小しません。
+
+## Phase G6.2 2 Ends / alternating starts
+
+1試合は2エンドで、各エンドはRed / Blueが3投ずつ行います。End 1はRed、End 2はBlueが先手です。各エンドの第6投後に現在盤面を採点し、先手・最終投・Red / Blue得点を物理世界から独立した`EndResult`へ固定します。
+
+End 1終了時は`EndTransition`で中間結果を表示します。**NEXT END** を押すとStone、予測軌道、実軌跡、吸収状態、衝突参照、中央天体、`PhysicsWorld`を破棄し、新しい盤面を生成します。End 1の`EndResult`だけは保持されます。Vs CPUではBlueがEnd 2の先手として自動探索を開始し、Local 2PではBlueを人間が操作します。
+
+HUDは終了済みエンドの`MATCH TOTAL`と現在盤面の`CURRENT END`を分けて表示します。End 2終了時はEnd 1、End 2、合計の表を表示し、合計得点から勝敗を決定します。引き分け時の延長戦はありません。

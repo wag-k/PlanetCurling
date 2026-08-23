@@ -9,9 +9,10 @@ Phase G4では、G1～G3のターン、強い多体重力、得点・勝敗、�
 | 項目 | G4仕様 |
 |---|---|
 | Players | Local 2P: Red / Blue Human、Vs CPU: Red Human / Blue CPU |
-| Shots per player | 3 |
-| Turn order | RedとBlueが交互に投球 |
-| Total shots | 6 |
+| Ends per match | 2 |
+| Shots per player / End | 3 |
+| Turn order | End 1はRed先手、End 2はBlue先手で交互に投球 |
+| Total shots | 12（6投 × 2 End） |
 | Simulation after shot | 固定10ゲーム年（1年は365日） |
 | Physics step | 6時間固定 |
 | Launch velocity | 既存基準速度の1.5倍 |
@@ -36,19 +37,25 @@ TurnTransition
   ↓
 Aiming
 
-6投目のシミュレーション終了
-  ↓ score confirmation / result decision
+End 1の6投目のシミュレーション終了
+  ↓ EndResultへscoreを固定
+EndTransition
+  ↓ NEXT END / board reset / Blue starts
+Aiming (End 2)
+  ↓ 6 shots
+End 2 score confirmation / Match Total result decision
+  ↓
 MatchFinished
 ```
 
-`Aiming`と`MatchFinished`では物理時間を進めません。`MatchFinished`では新しいPlanetを生成せず、入力も受け付けません。
+`Aiming`、`EndTransition`、`MatchFinished`では物理時間を進めません。`EndTransition`では終了済み盤面を表示し、`MatchFinished`では新しいPlanetを生成せず、投球入力も受け付けません。
 
 ## ゲーム進行層と物理層の境界
 
 ```text
 Game
   MatchController
-    Player / MatchState / MatchResult
+    Player / MatchState / EndResult / MatchResult
     CurlingStone / isReleased
     provisional and confirmed scores
   OrbitScoreEvaluator
@@ -68,7 +75,7 @@ Physics
 
 `CurlingStone`が所有者、投球番号、リリース状態、対応する`Planet`、`predictedTrajectory`、`actualTrajectory`を持ちます。軌跡はゲーム側メタデータであり、`Planet`にはRed/Blue、得点、軌跡を追加しません。`OrbitScoreEvaluator`、`TrajectoryPredictor`、`TrajectoryRecorder`もAkashic Engineに依存しません。
 
-各ターンの開始時に速度0の新しいPlanetを共通発射位置へ生成し、PhysicsWorldへ追加します。投球済みPlanetは中央天体と他の投球惑星へ既存のNewton重力を及ぼします。中央天体へ吸収された場合だけPhysicsWorldから除外し、`CurlingStone`の所有者・履歴・軌跡はゲーム側へ残します。
+各ターンの開始時に速度0の新しいPlanetを共通発射位置へ生成し、PhysicsWorldへ追加します。同じエンドの投球済みPlanetは中央天体と他の投球惑星へ既存のNewton重力を及ぼします。中央天体へ吸収された場合だけPhysicsWorldから除外し、`CurlingStone`の所有者・履歴・軌跡はそのエンドの終了までゲーム側へ残します。
 
 ## 衝突・ノックアウト
 
@@ -113,11 +120,11 @@ TrajectoryPoint[]
 
 リリース時に最後に表示されていた予測を`CurlingStone.predictedTrajectory`へ保存し、`actualTrajectory`を投球位置から開始します。`SimulationRunner`は各固定ステップ完了後に任意コールバックを呼び、`MatchController`が全リリース済み投球の`TrajectoryRecorder`を進めます。記録責務は積分器へ追加していません。
 
-実軌跡も10ゲーム日ごとにsampleします。後続投球の10年シミュレーション中も過去の全投球を記録し続けるため、相互重力で変化する経路が延長されます。AimingとMatchFinishedでは固定物理ステップが発生せず、同一位置を重複追加しません。
+実軌跡も10ゲーム日ごとにsampleします。同じエンドの後続投球の10年シミュレーション中も過去の全投球を記録し続けるため、相互重力で変化する経路が延長されます。エンド間では全軌跡を消去します。Aiming、EndTransition、MatchFinishedでは固定物理ステップが発生せず、同一位置を重複追加しません。
 
 投球直後は同じ盤面、速度、積分器、dt、期間なので予測と実際は一致します。一方、過去投球の予測時には後続惑星が存在しなかったため、試合が進むと実軌跡が保存済み予測から外れる場合があります。これは正常であり、PlanetCurlingの多体重力によるゲーム性です。
 
-描画は1点につき1 Entityを作らず、1投につき1つの`StoneTrajectoryView`が全点を直接描きます。予測は所有者色の点線、実軌跡は所有者色の実線です。最大Entity数は6投分に抑えます。
+描画は1点につき1 Entityを作らず、1投につき1つの`StoneTrajectoryView`が全点を直接描きます。予測は所有者色の点線、実軌跡は所有者色の実線です。表示対象は現在エンドの最大6投分です。
 
 ## ターゲット軌道と得点
 
@@ -148,13 +155,13 @@ effectiveOrbitError = radialDistanceError
 
 採点対象は`isReleased === true`かつ未吸収の投球だけです。照準中の`activeStone`は物理世界に存在していても得点へ含めず、吸収済み投石は常に0点です。
 
-試合中のRed / Blue得点は、表示時点の中心天体と全リリース済み投球から再計算します。そのため、後続投球の重力で過去の投球や中心天体が動くと暫定得点も変化します。6投目の10年シミュレーション終了時に得点を確定し、次のいずれかを保存します。
+現在エンドのRed / Blue得点は、表示時点の中心天体とそのエンドの全リリース済み投球から再計算します。そのため、同じエンドの後続投球の重力で過去の投球や中心天体が動くと暫定得点も変化します。各エンドの6投目の10年シミュレーション終了時に得点を`EndResult`へ固定し、2つの`EndResult`の合計から次の勝敗を保存します。
 
 - `RedWin`: Redの確定得点が高い
 - `BlueWin`: Blueの確定得点が高い
 - `Draw`: 確定得点が同じ
 
-延長戦やタイブレークはG2に含めません。
+同点時の延長戦やタイブレークはG6.2に含めません。
 
 ## 描画
 
@@ -162,11 +169,11 @@ effectiveOrbitError = radialDistanceError
 
 ## New Game
 
-`New Game`はPhysicsWorld、SimulationRunner、投球数、得点、勝敗、全予測・実軌跡、予測入力キャッシュを消去します。新しい中央天体と未リリースのRed 1投目だけを生成し、ターゲット軌道の追従先も新しい中心天体へ切り替えます。
+`New Game`はPhysicsWorld、SimulationRunner、投球数、全`EndResult`、得点、勝敗、全予測・実軌跡、予測入力キャッシュを消去します。End 1へ戻し、新しい中央天体と未リリースのRed 1投目だけを生成して、ターゲット軌道の追従先も新しい中心天体へ切り替えます。
 
 ## Phase G5 UI・演出
 
-Akashic非依存の`MatchController`がsimulation progressとStone score statusを提供し、`GameHudView`は物理・採点を行わず表示へ変換します。HUDはRed/Blue得点、turn、player shot / total shot、10年progress、各Stoneの得点・未投球・吸収状態を示します。値が変わったLabelだけをinvalidateします。
+Akashic非依存の`MatchController`がsimulation progressとStone score statusを提供し、`GameHudView`は物理・採点を行わず表示へ変換します。HUDはMatch Total、現在End得点、End番号、turn、player shot / End throw、10年progress、各Stoneの得点・未投球・吸収状態を示します。値が変わったLabelだけをinvalidateします。
 
 Aiming中のLaunch GuideはactiveStoneの実velocity方向（ドラッグと逆の実発射方向）を示し、長さだけを表示上clampします。物理velocityはclampしません。legacy gravity / velocity vectorは通常表示から除外しました。Prediction / Trails toggleは描画フラグだけを変更します。
 
@@ -229,9 +236,10 @@ utility = 1000 × (cpuScore - humanScore)
 
 Mode Selectionの`HOW TO PLAY`とGame HUDの`RULES`は、同一の`RulesOverlayView`を開きます。`RulesContent`はAkashic描画から分離した`RulePage` / `RuleSection` / `RuleLine`を持ち、将来の翻訳や文言変更でViewを作り直しません。
 
-3ページの責務は次のとおりです。
+4ページの責務は次のとおりです。
 
-- **GOAL & SCORE**: 3投ずつの勝敗、得点帯、位置と動径速度、2 AU targetと包含閾値
+- **MATCH FORMAT**: 2 End、各3投、先後交代、エンド間盤面reset、Match Total
+- **GOAL & SCORE**: 得点帯、位置と動径速度、2 AU targetと包含閾値
 - **HOW TO PLAY**: drag、launch guide、prediction、release、10年simulation、残留Planetの多体重力、Dotted / Solid
 - **COLLISIONS & TACTICS**: opponentへの衝突、Sun吸収、攻撃・防御、Vs CPUの色と探索精度
 
@@ -241,7 +249,15 @@ Mode Selectionの`HOW TO PLAY`とGame HUDの`RULES`は、同一の`RulesOverlayV
 
 `ResponsiveLayout`はRules panel、本文、CLOSE、PREV、NEXT、page indicator、Mode Selection / HUD入口を論理画面内へ収めます。pageを分割し、Compact Landscapeでもtouch targetを64 logical px以上に保ちます。
 
-## ロードマップ（G6.1完了時点）
+## Phase G6.2 2 End制・先後交代
+
+`MatchController`は各エンドの現在盤面得点と、終了済みエンドだけを合計するMatch Totalを明確に分離します。End 1は`Red → Blue → Red → Blue → Red → Blue`、End 2は`Blue → Red → Blue → Red → Blue → Red`です。第6投のシミュレーション完了時に`EndResult(endNumber, startingPlayer, lastPlayer, redScore, blueScore)`を生成し、以後の物理状態から独立した値として保持します。
+
+End 1後の`EndTransition`から`NEXT END`を実行すると、`PhysicsWorld`、中央天体、CollisionSystem、Stone、吸収状態、予測・実軌跡、投球カウンタを完全に初期化します。確定済み`EndResult`だけを維持し、End 2のBlue 1投目を生成します。CPU探索ロジックと候補評価は変更せず、Vs CPUのBlue Aiming検出によりEnd 2開始直後から通常どおり探索します。
+
+最終overlayはEnd 1、End 2、Match Totalを表形式で表示します。Rematchは全エンド履歴を消してEnd 1へ戻り、Change Modeは従来どおりMode Selectionを表示します。
+
+## ロードマップ（G6.2完了時点）
 
 - G1 Local turn-based match — DONE
 - G2 Target orbit / score / result — DONE
@@ -252,4 +268,5 @@ Mode Selectionの`HOW TO PLAY`とGame HUDの`RULES`は、同一の`RulesOverlayV
 - G5.1 Mobile / Tablet support — DONE
 - G6 CPU opponent — DONE
 - G6.1 How to Play / Rules UI — DONE
+- G6.2 2 Ends / alternating starts — DONE
 - G7 Simple online multiplayer

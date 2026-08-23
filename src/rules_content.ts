@@ -54,9 +54,9 @@ export class RulePage {
 	}
 }
 
-/** 現在のゲーム設定から生成した3ページの英語Rulesデータです。 */
+/** 現在のゲーム設定から生成した4ページの英語Rulesデータです。 */
 export class RulesContent {
-	/** Rules Overlayへ表示する3ページです。 */
+	/** Rules Overlayへ表示する4ページです。 */
 	readonly pages: RulePage[];
 
 	/** 得点定数を重複定義せず、現在のGameBalance / Settingに一致する既定Rulesを生成します。 */
@@ -68,10 +68,24 @@ export class RulesContent {
 		const velocityYears: string = RulesContent.formatYears(scoreEvaluator.velocityReferenceSeconds);
 		const simulationYears: string = RulesContent.formatYears(Setting.SimulationDurationPerShotSeconds);
 		return new RulesContent([
+			new RulePage("MATCH FORMAT", [
+				new RuleSection("2 ENDS", [
+					new RuleLine("Each player throws " + Setting.ShotsPerPlayerPerEnd + " planets per End."),
+					new RuleLine("END 1: RED STARTS. BLUE HAS THE FINAL SHOT.", RuleLineStyle.Emphasis),
+					new RuleLine("END 2: BLUE STARTS. RED HAS THE FINAL SHOT.", RuleLineStyle.Emphasis)
+				]),
+				new RuleSection("BETWEEN ENDS", [
+					new RuleLine("The board resets between Ends."),
+					new RuleLine("Planets and trails do not carry into the next End.")
+				]),
+				new RuleSection("WIN THE MATCH", [
+					new RuleLine("Scores from both Ends are added together."),
+					new RuleLine("The player with the highest Match Total wins.", RuleLineStyle.Emphasis)
+				])
+			]),
 			new RulePage("GOAL & SCORE", [
 				new RuleSection("GOAL", [
-					new RuleLine("Red and Blue throw " + Setting.ShotsPerPlayer + " planets each."),
-					new RuleLine("The player with the higher total score wins.")
+					new RuleLine("Build stable scoring orbits around the Sun.")
 				]),
 				new RuleSection("SCORE", [
 					new RuleLine("3 pts   Excellent orbit"),
@@ -102,7 +116,7 @@ export class RulesContent {
 					new RuleLine("5. The universe then advances " + simulationYears + ".")
 				]),
 				new RuleSection("THE GRAVITY FIELD", [
-					new RuleLine("Placed planets stay in the game.", RuleLineStyle.Emphasis),
+					new RuleLine("Placed planets stay for the current End.", RuleLineStyle.Emphasis),
 					new RuleLine("They keep moving and their gravity changes future shots.", RuleLineStyle.Emphasis),
 					new RuleLine("EVERY SHOT CHANGES THE GRAVITY FIELD.", RuleLineStyle.Emphasis)
 				]),

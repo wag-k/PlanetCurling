@@ -259,7 +259,7 @@ describe("ゲーム進行と予測への衝突統合", (): void => {
 		controller.advanceSimulation(1);
 		expect(stone.isAbsorbed).toBe(true);
 		expect(runner.world.bodies.indexOf(stone.body)).toBe(-1);
-		expect(controller.redScore).toBe(0);
+		expect(controller.currentEndRedScore).toBe(0);
 		expect(stone.actualTrajectory[stone.actualTrajectory.length - 1].xMetres).toBe(stone.body.pos.x);
 		expect(controller.consumeCollisionEvents()[0].kind).toBe(CollisionEventKind.StoneCentralBody);
 	});

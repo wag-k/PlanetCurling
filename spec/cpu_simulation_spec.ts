@@ -93,7 +93,7 @@ describe("CpuShotSimulator", (): void => {
 			prediction: stone.predictedTrajectory,
 			actual: stone.actualTrajectory
 		}));
-		const originalScores: number[] = [controller.redScore, controller.blueScore];
+		const originalScores: number[] = [controller.currentEndRedScore, controller.currentEndBlueScore];
 
 		new CpuShotSimulator().simulate(context, candidate(35));
 
@@ -105,7 +105,7 @@ describe("CpuShotSimulator", (): void => {
 			prediction: stone.predictedTrajectory,
 			actual: stone.actualTrajectory
 		}))).toEqual(originalStoneValues);
-		expect([controller.redScore, controller.blueScore]).toEqual(originalScores);
+		expect([controller.currentEndRedScore, controller.currentEndBlueScore]).toEqual(originalScores);
 		expect(controller.activeStone!.body).toBe(context.activeStoneBody);
 	});
 
