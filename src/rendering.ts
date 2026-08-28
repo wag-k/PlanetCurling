@@ -1,9 +1,9 @@
 import {CollisionEvent, CollisionEventKind} from "./collision";
-import {GameBalance} from "./game_balance";
 import {CollisionPresentationEvent, TrajectoryVisibility} from "./game_presentation";
 import {CurlingStone, Player} from "./match_controller";
 import {Planet} from "./planet";
-import {LayoutRect, ResponsiveLayout} from "./responsive_layout";
+import {LayoutMode, LayoutRect, ResponsiveLayout} from "./responsive_layout";
+import {createScoringRingDefinitions, ScoringRingDefinition, ScoringRingKind} from "./scoring_ring";
 import {TrajectoryPoint} from "./trajectory";
 
 /** Aiming中だけactiveStoneから実際の発射方向へ伸び、速度強度を表示上だけclampするGuideです。 */
@@ -91,6 +91,8 @@ export class TargetOrbitView {
 
 	/** Target Orbitのmobile向けdot補正を持つレイアウトです。 */
 	private readonly layout: ResponsiveLayout;
+	/** 色だけに依存しないTarget / 3 PT / 2 PT / 1 PTラベル用fontです。 */
+	private readonly labelFont: g.Font;
 
 	/** 位置誤差だけを示す同心円ガイドを生成します。 */
 	constructor(
@@ -98,20 +100,19 @@ export class TargetOrbitView {
 		parent: g.E,
 		centralBody: Planet,
 		worldSpanMeters: number,
-		layout: ResponsiveLayout
+		layout: ResponsiveLayout,
+		labelFont: g.Font
 	) {
 		this.currentCentralBody = centralBody;
 		this.worldSpanMeters = worldSpanMeters;
 		this.layout = layout;
+		this.labelFont = labelFont;
 		this.viewportShortSidePixels = layout.boardRect.width;
 		this.entity = new g.E({scene: scene});
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.OnePointOrbitErrorMetres, "#26384d", 2);
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.OnePointOrbitErrorMetres, "#26384d", 2);
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.TwoPointOrbitErrorMetres, "#36577a", 2);
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.TwoPointOrbitErrorMetres, "#36577a", 2);
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres - GameBalance.ThreePointOrbitErrorMetres, "#4c86a8", 3);
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres + GameBalance.ThreePointOrbitErrorMetres, "#4c86a8", 3);
-		this.addRing(scene, GameBalance.TargetOrbitRadiusMetres, "#8be9fd", 4);
+		createScoringRingDefinitions().forEach((definition: ScoringRingDefinition): void => {
+			this.addRing(scene, definition);
+			if (definition.label.length > 0) this.addRingLabel(scene, definition);
+		});
 		parent.append(this.entity);
 		this.update();
 	}
@@ -138,25 +139,53 @@ export class TargetOrbitView {
 	}
 
 	/** 円周上へ小さなFilledRectを並べ、外部描画ライブラリなしの点線リングを追加します。 */
-	private addRing(scene: g.Scene, radiusMetres: number, cssColor: string, dotSizePixels: number): void {
+	private addRing(scene: g.Scene, definition: ScoringRingDefinition): void {
 		const segmentCount: number = 72;
-		const adjustedDotSize: number = dotSizePixels + this.layout.targetOrbitDotBoost;
+		const adjustedDotSize: number = definition.dotSizePixels + this.layout.targetOrbitDotBoost;
 		const radiusPixels: number = metersToPixels(
-			radiusMetres,
+			definition.radiusMetres,
 			this.worldSpanMeters,
 			this.viewportShortSidePixels
 		);
-		for (let index: number = 0; index < segmentCount; index += 1) {
+		for (let index: number = 0; index < segmentCount; index += definition.segmentStride) {
 			const angle: number = index / segmentCount * Math.PI * 2;
 			this.entity.append(new g.FilledRect({
 				scene: scene,
-				cssColor: cssColor,
+				cssColor: definition.color,
 				x: Math.cos(angle) * radiusPixels - adjustedDotSize / 2,
 				y: Math.sin(angle) * radiusPixels - adjustedDotSize / 2,
 				width: adjustedDotSize,
 				height: adjustedDotSize
 			}));
 		}
+	}
+
+	/** 外側境界とTargetへ異なる方向に文字を置き、色を見なくてもリングの意味を示します。 */
+	private addRingLabel(scene: g.Scene, definition: ScoringRingDefinition): void {
+		const radiusPixels: number = metersToPixels(
+			definition.radiusMetres,
+			this.worldSpanMeters,
+			this.viewportShortSidePixels
+		);
+		const angle: number = this.getLabelAngle(definition.kind);
+		const fontSize: number = this.layout.mode === LayoutMode.DesktopLandscape ? 17 : 19;
+		this.entity.append(new g.Label({
+			scene: scene,
+			font: this.labelFont,
+			text: definition.label,
+			fontSize: fontSize,
+			textColor: definition.color,
+			x: Math.cos(angle) * radiusPixels - definition.label.length * fontSize * 0.25,
+			y: Math.sin(angle) * radiusPixels - fontSize / 2
+		}));
+	}
+
+	/** 1 PT / 2 PT / 3 PT / Target labelを盤面の異なる方向へ分散する角度を返します。 */
+	private getLabelAngle(kind: ScoringRingKind): number {
+		if (kind === ScoringRingKind.OnePointBoundary) return Math.PI * 0.22;
+		if (kind === ScoringRingKind.TwoPointBoundary) return 0;
+		if (kind === ScoringRingKind.ThreePointBoundary) return -Math.PI * 0.22;
+		return -Math.PI / 2;
 	}
 }
 
@@ -533,7 +562,8 @@ export class PlanetRenderer {
 				this.targetLayer,
 				centralBody,
 				this.worldSpanMeters,
-				this.layout
+				this.layout,
+				this.effectFont
 			);
 		} else {
 			this.targetOrbitView.setCentralBody(centralBody);

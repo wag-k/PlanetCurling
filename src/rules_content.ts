@@ -92,19 +92,22 @@ export class RulesContent {
 					new RuleLine("2 pts   Good orbit"),
 					new RuleLine("1 pt    Near the target orbit"),
 					new RuleLine("0 pt    Outside the scoring range"),
-					new RuleLine("Aim for the rings around the Sun.", RuleLineStyle.Emphasis)
+					new RuleLine("The rings show position-based scoring zones.", RuleLineStyle.Emphasis),
+					new RuleLine("Closer to the target orbit gives a smaller position error.")
 				]),
 				new RuleSection("POSITION + MOTION", [
-					new RuleLine("Score depends on both distance from the target orbit", RuleLineStyle.Emphasis),
-					new RuleLine("and radial speed toward or away from the Sun.", RuleLineStyle.Emphasis),
-					new RuleLine("Fast motion inward or outward can lower the score.", RuleLineStyle.Emphasis)
+					new RuleLine("Moving toward or away from the Sun adds a speed penalty.", RuleLineStyle.Emphasis),
+					new RuleLine("Final score uses position error + radial-speed penalty.", RuleLineStyle.Emphasis),
+					new RuleLine("A Stone inside a ring can still receive a lower score.")
 				]),
 				new RuleSection("DETAILS", [
 					new RuleLine("Target orbit: " + targetAu + " from the Sun", RuleLineStyle.Detail),
 					new RuleLine("Effective error = distance error + radial speed x " + velocityYears, RuleLineStyle.Detail),
 					new RuleLine("3 points: <= " + threePointAu, RuleLineStyle.Detail),
 					new RuleLine("2 points: <= " + twoPointAu, RuleLineStyle.Detail),
-					new RuleLine("1 point: <= " + onePointAu + "   otherwise: 0 points", RuleLineStyle.Detail)
+					new RuleLine("1 point: <= " + onePointAu + "   otherwise: 0 points", RuleLineStyle.Detail),
+					new RuleLine("Example: 0.12 AU position + 0.05 AU speed penalty", RuleLineStyle.Detail),
+					new RuleLine("= 0.17 AU effective error => 3 points", RuleLineStyle.Detail)
 				])
 			]),
 			new RulePage("HOW TO PLAY", [

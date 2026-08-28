@@ -136,8 +136,8 @@ relativeVelocity = stone.velocity - central.velocity
 r = |relativePosition|
 radialDistanceError = |r - targetRadius|
 radialVelocity = dot(relativeVelocity, relativePosition) / r
-effectiveOrbitError = radialDistanceError
-                    + |radialVelocity| × ScoreVelocityReferenceSeconds
+radialVelocityPenalty = |radialVelocity| × ScoreVelocityReferenceSeconds
+effectiveOrbitError = radialDistanceError + radialVelocityPenalty
 ```
 
 `ScoreVelocityReferenceSeconds`は1ゲーム年です。動径速度が0に近いほど、円軌道の半径を維持しやすい状態として高く評価します。接線方向速度そのものや軌道要素の完全一致はG2では判定しません。
@@ -149,7 +149,15 @@ effectiveOrbitError = radialDistanceError
 | 1.00 AU以下 | 1 |
 | 1.00 AU超 | 0 |
 
-境界値は上側を含みます。画面の同心円は位置誤差だけを表すため、見た目がリング内でも動径速度が大きければ得点は下がります。
+境界値は上側を含みます。`OrbitEvaluation`は`radiusMetres`、`radialDistanceErrorMetres`、符号付き`radialVelocityMetresPerSecond`、距離換算済み`radialVelocityPenaltyMetres`、`effectiveOrbitErrorMetres`、`points`を保持します。SI単位の計算責務は`OrbitScoreEvaluator`だけが持ち、UIは距離値をAUへ表示変換するだけです。
+
+画面の同心円は位置誤差だけを表すため、見た目がリング内でも動径速度が大きければ得点は下がります。最終軌道得点の判定式は次の関係です。
+
+```text
+Final orbit score threshold input
+= position error
++ radial-speed penalty converted to distance
+```
 
 ## 暫定得点と勝敗
 
@@ -165,7 +173,9 @@ effectiveOrbitError = radialDistanceError
 
 ## 描画
 
-ターゲット軌道と得点帯の内外境界は、Akashic Engineの`FilledRect`を円周上へ配置した点線リングで描きます。リング群の親Entityを中心天体の最新位置へ毎フレーム同期するため、中心天体が移動しても追従します。外部描画ライブラリや新規画像アセットは使用しません。
+ターゲット軌道と得点帯の内外境界は、Akashic Engineの`FilledRect`を円周上へ配置した点線リングで描きます。7本の半径は`createScoringRingDefinitions()`が`GameBalance`のTarget、3点、2点、1点しきい値から生成し、View側に物理定数を複製しません。
+
+Target、3 PT、2 PT、1 PTは、dot size、segment間隔、色、盤面ラベルで段階的に区別します。色覚だけに依存せず、Targetが最も太く、3点境界、2点境界、1点境界の順に弱く表示されます。半透明bandや不透明な塗りつぶしは使用せず、Stone、Prediction、Actual Trail、Collision effectの視認性を維持します。リング群の親Entityを中心天体の最新位置へ毎フレーム同期するため、中心天体が移動しても追従します。
 
 ## New Game
 
@@ -183,7 +193,7 @@ Actual collisionだけがpresentation eventとなり、Stone–Stoneは`HIT!`、
 
 Akashic内部は従来どおり1280×720の固定論理解像度です。`ResponsiveLayout`は物理device viewportからDesktop Landscape、Compact Landscape、Portraitを判定しますが、変更するのはView・HUD・入力用矩形だけです。物理座標、得点、collision radius、launch換算、trajectory samplingは参照も変更もしません。
 
-論理画面の左720×720を正方形のGame Board、右560×720をHUDとして分離しました。HUDにはScore、Turn、Shot、Simulation Progress、Stone Status、Prediction / Trails toggleを短い文言で縦に配置します。結果overlayはHUDではなく盤面中央へ収め、Rematchは260×80、通常toggleも高さ72～80のtouchable背景全体を入力対象にします。
+論理画面の左720×720を正方形のGame Board、右560×720をHUDとして分離しました。HUDにはScore、Turn、Shot、Simulation Progress、Stone Status、Prediction / Trails toggle、Score Details、Rulesを短い文言で配置します。結果overlayはHUDではなく盤面中央へ収め、Rematchは260×80、通常buttonも高さ68～72以上のtouchable背景全体を入力対象にします。
 
 Stone Spriteの見た目と入力を分離し、Aiming中のactiveStoneだけ112～128px角の透明touch targetを表示します。targetはStoneを追従し、盤面境界内へclampします。過去Stoneと吸収Stoneでは非表示のため操作できません。ドラッグの論理量からlaunch velocityへの換算式は従来どおりです。
 
@@ -256,6 +266,14 @@ Mode Selectionの`HOW TO PLAY`とGame HUDの`RULES`は、同一の`RulesOverlayV
 End 1後の`EndTransition`から`NEXT END`を実行すると、`PhysicsWorld`、中央天体、CollisionSystem、Stone、吸収状態、予測・実軌跡、投球カウンタを完全に初期化します。確定済み`EndResult`だけを維持し、End 2のBlue 1投目を生成します。CPU探索ロジックと候補評価は変更せず、Vs CPUのBlue Aiming検出によりEnd 2開始直後から通常どおり探索します。
 
 最終overlayはEnd 1、End 2、Match Totalを表形式で表示します。Rematchは全エンド履歴を消してEnd 1へ戻り、Change Modeは従来どおりMode Selectionを表示します。
+
+## Issue #2 得点内訳・スコアリングリング
+
+`ScoreDetailsModel`は現在Endの`MatchController.stones`だけをR1～R3、B1～B3へ変換します。リリース済みかつ未吸収のStoneは既存`OrbitScoreEvaluator`を呼び、位置誤差、速度ペナルティ、実効誤差、点数を同じ`OrbitEvaluation`から取得します。未投球は`-`、吸収済みは内訳なしの`ABS`・0点です。過去Endの物理内訳は保持せず、確定得点は従来どおり`EndResult`へ残します。
+
+`ScoreDetailsOverlayView`は読み取り専用です。RulesとScore Detailsを`ModalVisibilityGroup`へまとめ、どちらかの表示中は同じ`RulesInteractionGate`がSimulation、Turn、CPU planning / preview、人間入力、表示toggleを停止します。開閉でPhysicsWorld、Score、Prediction、Trajectory、CPU candidate状態を作り直しません。
+
+ResponsiveLayoutはScore Details panel、6行5列の表、CLOSE buttonを1280×720論理画面内へ配置します。Desktop、smartphone landscape、tabletの各モードで同じ論理情報を保ち、Compactではfontとtouch targetを拡大します。CPU候補評価は従来どおり同じ得点と`effectiveOrbitErrorMetres`を使用し、候補数・utility weight・難易度は変更しません。
 
 ## ロードマップ（G6.2完了時点）
 

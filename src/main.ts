@@ -10,7 +10,8 @@ import {LaunchGuideView, PlanetRenderer, PlanetView} from "./rendering";
 import {calculateCurrentLayout, ResponsiveLayout} from "./responsive_layout";
 import {RulesContent} from "./rules_content";
 import {RulesOverlayView} from "./rules_overlay_view";
-import {RulesInteractionGate, RulesOverlayState} from "./rules_state";
+import {ModalVisibilityGroup, RulesInteractionGate, RulesOverlayState} from "./rules_state";
+import {ScoreDetailsOverlayView} from "./score_details_view";
 import {Setting} from "./setting";
 import {SimulationRunner} from "./simulation_runner";
 import {Universe} from "./universe";
@@ -84,8 +85,8 @@ function main(_param: g.GameMainParameterObject): void {
 				if (existing !== undefined) {
 					existing.setVisible(!stone.isAbsorbed);
 					existing.setInputActive(matchController.state === MatchState.Aiming
-						&& matchController.activeStone === stone && !stone.isAbsorbed
-						&& !modeSelection.isVisible && !rulesOverlay.isVisible
+					&& matchController.activeStone === stone && !stone.isAbsorbed
+						&& !modeSelection.isVisible && !rulesOverlay.isVisible && !scoreDetailsOverlay.isVisible
 						&& cpuTurnController.isHumanStoneInputAllowed);
 					return;
 				}
@@ -94,7 +95,7 @@ function main(_param: g.GameMainParameterObject): void {
 				view.setVisible(!stone.isAbsorbed);
 				view.setInputActive(matchController.state === MatchState.Aiming
 					&& matchController.activeStone === stone && !stone.isAbsorbed
-					&& !modeSelection.isVisible && !rulesOverlay.isVisible
+					&& !modeSelection.isVisible && !rulesOverlay.isVisible && !scoreDetailsOverlay.isVisible
 					&& cpuTurnController.isHumanStoneInputAllowed);
 				bindStoneInput(stone, view);
 			});
@@ -121,7 +122,13 @@ function main(_param: g.GameMainParameterObject): void {
 			}
 		);
 		const rulesOverlay: RulesOverlayView = new RulesOverlayView(scene, font, layout, rulesState);
-		const rulesGate: RulesInteractionGate = new RulesInteractionGate(rulesOverlay);
+		const scoreDetailsOverlay: ScoreDetailsOverlayView = new ScoreDetailsOverlayView(
+			scene, font, layout, matchController
+		);
+		const rulesGate: RulesInteractionGate = new RulesInteractionGate(new ModalVisibilityGroup([
+			rulesOverlay,
+			scoreDetailsOverlay
+		]));
 		const orientationNotice: OrientationNoticeView = new OrientationNoticeView(scene, font, layout);
 
 		hud.rematchButton.onPointDown.add((): void => {
@@ -146,7 +153,12 @@ function main(_param: g.GameMainParameterObject): void {
 		hud.trailsButton.onPointDown.add((): void => {
 			rulesGate.runHumanInput((): void => renderer.trajectoryVisibility.toggleTrails());
 		});
-		hud.rulesButton.onPointDown.add((): void => rulesOverlay.show());
+		hud.scoreDetailsButton.onPointDown.add((): void => {
+			rulesGate.runHumanInput((): void => scoreDetailsOverlay.show());
+		});
+		hud.rulesButton.onPointDown.add((): void => {
+			rulesGate.runHumanInput((): void => rulesOverlay.show());
+		});
 		modeSelection.howToPlayButton.onPointDown.add((): void => rulesOverlay.show());
 		rebuildPlanetViews();
 		hud.update();

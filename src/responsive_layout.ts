@@ -101,6 +101,8 @@ export class ResponsiveLayout {
 	readonly trailsButtonRect: LayoutRect;
 	/** Rules Overlayを開くHUDタッチ領域です。 */
 	readonly rulesButtonRect: LayoutRect;
+	/** 現在EndのStone別得点内訳を開くHUDタッチ領域です。 */
+	readonly scoreDetailsButtonRect: LayoutRect;
 	/** 試合終了時に盤面中央へ置くoverlay領域です。 */
 	readonly resultOverlayRect: LayoutRect;
 	/** Result overlay内のRematchタッチ領域です。 */
@@ -135,6 +137,12 @@ export class ResponsiveLayout {
 	readonly rulesNextButtonRect: LayoutRect;
 	/** Rulesのpage indicatorを中央表示する領域です。 */
 	readonly rulesPageIndicatorRect: LayoutRect;
+	/** Score Detailsの全画面modal panelです。 */
+	readonly scoreDetailsOverlayRect: LayoutRect;
+	/** Score Detailsの6 Stone表を配置する領域です。 */
+	readonly scoreDetailsTableRect: LayoutRect;
+	/** Score Detailsを閉じる大型タッチ領域です。 */
+	readonly scoreDetailsCloseButtonRect: LayoutRect;
 	/** 短時間のTurn通知を置く盤面内領域です。 */
 	readonly turnOverlayRect: LayoutRect;
 	/** Score表示の論理font sizeです。 */
@@ -200,11 +208,12 @@ export class ResponsiveLayout {
 		this.progressRect = new LayoutRect(contentX, 218, contentWidth, 76);
 		this.stoneStatusRect = new LayoutRect(contentX, 310, contentWidth, 116);
 		const buttonGap: number = 12;
-		const buttonWidth: number = (contentWidth - buttonGap * 2) / 3;
-		const buttonHeight: number = compact ? 80 : 72;
-		this.predictionButtonRect = new LayoutRect(contentX, 456, buttonWidth, buttonHeight);
-		this.trailsButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 456, buttonWidth, buttonHeight);
-		this.rulesButtonRect = new LayoutRect(contentX + (buttonWidth + buttonGap) * 2, 456, buttonWidth, buttonHeight);
+		const buttonWidth: number = (contentWidth - buttonGap) / 2;
+		const buttonHeight: number = compact ? 72 : 68;
+		this.predictionButtonRect = new LayoutRect(contentX, 448, buttonWidth, buttonHeight);
+		this.trailsButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 448, buttonWidth, buttonHeight);
+		this.scoreDetailsButtonRect = new LayoutRect(contentX, 532, buttonWidth, buttonHeight);
+		this.rulesButtonRect = new LayoutRect(contentX + buttonWidth + buttonGap, 532, buttonWidth, buttonHeight);
 		this.resultOverlayRect = new LayoutRect(
 			this.boardRect.x + (this.boardRect.width - 620) / 2,
 			this.boardRect.y + (this.boardRect.height - 500) / 2,
@@ -258,6 +267,19 @@ export class ResponsiveLayout {
 			this.rulesOverlayRect.bottom - 68,
 			180,
 			44
+		);
+		this.scoreDetailsOverlayRect = new LayoutRect(70, 18, logicalWidth - 140, logicalHeight - 36);
+		this.scoreDetailsTableRect = new LayoutRect(
+			this.scoreDetailsOverlayRect.x + 40,
+			this.scoreDetailsOverlayRect.y + 100,
+			this.scoreDetailsOverlayRect.width - 80,
+			this.scoreDetailsOverlayRect.height - 210
+		);
+		this.scoreDetailsCloseButtonRect = new LayoutRect(
+			this.scoreDetailsOverlayRect.right - 160,
+			this.scoreDetailsOverlayRect.y + 18,
+			130,
+			64
 		);
 		this.turnOverlayRect = new LayoutRect(this.boardRect.x + 210, 48, 300, 56);
 		this.scoreFontSize = compact ? 34 : 32;

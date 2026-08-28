@@ -6,6 +6,22 @@ export interface RulesVisibility {
 	readonly isVisible: boolean;
 }
 
+/** 複数のmodal表示状態をまとめ、いずれか表示中なら背面ゲームを停止します。 */
+export class ModalVisibilityGroup implements RulesVisibility {
+	/** RulesやScore Detailsなど、pause方針を共有する読み取り専用状態です。 */
+	readonly visibilities: RulesVisibility[];
+
+	/** 指定したmodal状態を同じApplication gateへまとめます。 */
+	constructor(visibilities: RulesVisibility[]) {
+		this.visibilities = visibilities.slice();
+	}
+
+	/** 1つでも表示中のmodalがある場合にtrueを返します。 */
+	get isVisible(): boolean {
+		return this.visibilities.some((visibility: RulesVisibility): boolean => visibility.isVisible);
+	}
+}
+
 /** 表示中pageとoverlay開閉をAkashic描画から分離して管理します。 */
 export class RulesOverlayState implements RulesVisibility {
 	/** 表示する翻訳可能なRulesデータです。 */

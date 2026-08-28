@@ -1,6 +1,6 @@
 import {CpuTurnController, CpuTurnState} from "./cpu_turn_controller";
 import {formatMatchResultForMode, TrajectoryVisibility} from "./game_presentation";
-import {formatCpuDifficulty, GameMode, GameSessionConfig} from "./game_session";
+import {GameMode, GameSessionConfig} from "./game_session";
 import {
 	CurlingStone, EndResult, MatchController, MatchState, Player, StoneScoreStatus, StoneScoreStatusKind
 } from "./match_controller";
@@ -23,6 +23,8 @@ export class GameHudView {
 	readonly trailsButton: g.FilledRect;
 	/** 共通Rules Overlayを開く大型buttonです。 */
 	readonly rulesButton: g.FilledRect;
+	/** 現在EndのStone別Score Detailsを開く大型buttonです。 */
+	readonly scoreDetailsButton: g.FilledRect;
 	/** 試合状態の読み取り元です。 */
 	private readonly controller: MatchController;
 	/** 表示専用toggleです。 */
@@ -96,6 +98,7 @@ export class GameHudView {
 			layout.stoneStatusRect.x, layout.stoneStatusRect.bottom - 18, "#cfd8dc");
 		this.predictionButton = this.addButton(scene, font, layout.predictionButtonRect, "predictionToggle");
 		this.trailsButton = this.addButton(scene, font, layout.trailsButtonRect, "trailsToggle");
+		this.scoreDetailsButton = this.addButton(scene, font, layout.scoreDetailsButtonRect, "scoreDetails");
 		this.rulesButton = this.addButton(scene, font, layout.rulesButtonRect, "rules");
 		this.resultOverlay = new g.FilledRect({
 			scene: scene,
@@ -171,11 +174,10 @@ export class GameHudView {
 		this.setText("progressBar", "[" + this.repeat("|", filled) + this.repeat(".", 16 - filled) + "]");
 		this.setText("redStones", this.formatStones(Player.Red, "R"));
 		this.setText("blueStones", this.formatStones(Player.Blue, "B"));
-		this.setText("help", this.sessionConfig.gameMode === GameMode.VsCpu
-			? "CPU: " + formatCpuDifficulty(this.sessionConfig.cpuDifficulty) + "   Orbit score"
-			: "LOCAL 2P   Orbit score");
+		this.setText("help", "Rings = POSITION guide; speed may reduce score");
 		this.setText("predictionToggle", "PRED " + (this.visibility.predictionVisible ? "ON" : "OFF"));
 		this.setText("trailsToggle", "TRAIL " + (this.visibility.trailsVisible ? "ON" : "OFF"));
+		this.setText("scoreDetails", "SCORE DETAILS");
 		this.setText("rules", "RULES");
 		this.setText("rematch", "REMATCH");
 		this.setText("changeMode", "CHANGE MODE");

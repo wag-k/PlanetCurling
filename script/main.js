@@ -11,6 +11,7 @@ var responsive_layout_1 = require("./responsive_layout");
 var rules_content_1 = require("./rules_content");
 var rules_overlay_view_1 = require("./rules_overlay_view");
 var rules_state_1 = require("./rules_state");
+var score_details_view_1 = require("./score_details_view");
 var setting_1 = require("./setting");
 var simulation_runner_1 = require("./simulation_runner");
 var universe_1 = require("./universe");
@@ -63,7 +64,7 @@ function main(_param) {
                     existing.setVisible(!stone.isAbsorbed);
                     existing.setInputActive(matchController.state === match_controller_1.MatchState.Aiming
                         && matchController.activeStone === stone && !stone.isAbsorbed
-                        && !modeSelection.isVisible && !rulesOverlay.isVisible
+                        && !modeSelection.isVisible && !rulesOverlay.isVisible && !scoreDetailsOverlay.isVisible
                         && cpuTurnController.isHumanStoneInputAllowed);
                     return;
                 }
@@ -72,7 +73,7 @@ function main(_param) {
                 view.setVisible(!stone.isAbsorbed);
                 view.setInputActive(matchController.state === match_controller_1.MatchState.Aiming
                     && matchController.activeStone === stone && !stone.isAbsorbed
-                    && !modeSelection.isVisible && !rulesOverlay.isVisible
+                    && !modeSelection.isVisible && !rulesOverlay.isVisible && !scoreDetailsOverlay.isVisible
                     && cpuTurnController.isHumanStoneInputAllowed);
                 bindStoneInput(stone, view);
             });
@@ -91,7 +92,11 @@ function main(_param) {
             rebuildPlanetViews();
         });
         var rulesOverlay = new rules_overlay_view_1.RulesOverlayView(scene, font, layout, rulesState);
-        var rulesGate = new rules_state_1.RulesInteractionGate(rulesOverlay);
+        var scoreDetailsOverlay = new score_details_view_1.ScoreDetailsOverlayView(scene, font, layout, matchController);
+        var rulesGate = new rules_state_1.RulesInteractionGate(new rules_state_1.ModalVisibilityGroup([
+            rulesOverlay,
+            scoreDetailsOverlay
+        ]));
         var orientationNotice = new game_hud_view_1.OrientationNoticeView(scene, font, layout);
         hud.rematchButton.onPointDown.add(function () {
             rulesGate.runHumanInput(function () {
@@ -116,7 +121,12 @@ function main(_param) {
         hud.trailsButton.onPointDown.add(function () {
             rulesGate.runHumanInput(function () { return renderer.trajectoryVisibility.toggleTrails(); });
         });
-        hud.rulesButton.onPointDown.add(function () { return rulesOverlay.show(); });
+        hud.scoreDetailsButton.onPointDown.add(function () {
+            rulesGate.runHumanInput(function () { return scoreDetailsOverlay.show(); });
+        });
+        hud.rulesButton.onPointDown.add(function () {
+            rulesGate.runHumanInput(function () { return rulesOverlay.show(); });
+        });
         modeSelection.howToPlayButton.onPointDown.add(function () { return rulesOverlay.show(); });
         rebuildPlanetViews();
         hud.update();

@@ -189,6 +189,21 @@
 			"type": "script",
 			"path": "script/rules_state.js",
 			"global": true
+		},
+		"score_details": {
+			"type": "script",
+			"path": "script/score_details.js",
+			"global": true
+		},
+		"score_details_view": {
+			"type": "script",
+			"path": "script/score_details_view.js",
+			"global": true
+		},
+		"scoring_ring": {
+			"type": "script",
+			"path": "script/scoring_ring.js",
+			"global": true
 		}
 	},
 	"moduleMainScripts": {},

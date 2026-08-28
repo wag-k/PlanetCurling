@@ -9,7 +9,8 @@ import {PhysicalConstant} from "../src/physical_constant";
 import {IPhysicsIntegrator, PhysicsIntegratorKind} from "../src/physics_integrator";
 import {PhysicsWorld} from "../src/physics_world";
 import {RulesContent} from "../src/rules_content";
-import {RulesInteractionGate, RulesOverlayState} from "../src/rules_state";
+import {ModalVisibilityGroup, RulesInteractionGate, RulesOverlayState} from "../src/rules_state";
+import {ScoreDetailsOverlayState} from "../src/score_details_view";
 import {Setting} from "../src/setting";
 import {SimulationRunner} from "../src/simulation_runner";
 import {TrajectoryPredictor} from "../src/trajectory";
@@ -168,10 +169,34 @@ describe("G6.2 Rules content and navigation", (): void => {
 		expect(lines).toContain("2 points: <= " + twoAu);
 		expect(lines).toContain("1 point: <= " + oneAu + "   otherwise: 0 points");
 		expect(lines).toContain("Effective error = distance error + radial speed x 1 game year");
+		expect(lines).toContain("The rings show position-based scoring zones.");
+		expect(lines).toContain("Moving toward or away from the Sun adds a speed penalty.");
+		expect(lines).toContain("Final score uses position error + radial-speed penalty.");
+		expect(lines).toContain("Example: 0.12 AU position + 0.05 AU speed penalty");
+		expect(lines).toContain("= 0.17 AU effective error => 3 points");
 	});
 });
 
 describe("G6.1 Rules pause and input gate", (): void => {
+	it("RulesまたはScore Detailsのどちらかが表示中なら共通gateを停止する", (): void => {
+		const rulesState: RulesOverlayState = new RulesOverlayState(RulesContent.createDefault());
+		const scoreDetailsState: ScoreDetailsOverlayState = new ScoreDetailsOverlayState();
+		const gate: RulesInteractionGate = new RulesInteractionGate(new ModalVisibilityGroup([
+			rulesState,
+			scoreDetailsState
+		]));
+		let runCount: number = 0;
+
+		expect(gate.runFrame((): void => { runCount += 1; })).toBe(true);
+		rulesState.show();
+		expect(gate.runFrame((): void => { runCount += 1; })).toBe(false);
+		rulesState.close();
+		scoreDetailsState.show();
+		expect(gate.runHumanInput((): void => { runCount += 1; })).toBe(false);
+		scoreDetailsState.close();
+		expect(gate.runFrame((): void => { runCount += 1; })).toBe(true);
+		expect(runCount).toBe(2);
+	});
 	it("表示中はSimulationを進めず、閉じると同じstateから再開する", (): void => {
 		const controller: MatchController = createMatchController();
 		controller.releaseActiveStone();

@@ -14,6 +14,9 @@ export class OrbitEvaluation {
 	/** 中心天体に対する符号付き動径速度（m/s）です。 */
 	readonly radialVelocityMetresPerSecond: number;
 
+	/** 動径速度の絶対値を評価基準時間で距離換算したペナルティ（m）です。 */
+	readonly radialVelocityPenaltyMetres: number;
+
 	/** 距離誤差と動径速度を合成した実効軌道誤差（m）です。 */
 	readonly effectiveOrbitErrorMetres: number;
 
@@ -25,12 +28,14 @@ export class OrbitEvaluation {
 		radiusMetres: number,
 		radialDistanceErrorMetres: number,
 		radialVelocityMetresPerSecond: number,
+		radialVelocityPenaltyMetres: number,
 		effectiveOrbitErrorMetres: number,
 		points: number
 	) {
 		this.radiusMetres = radiusMetres;
 		this.radialDistanceErrorMetres = radialDistanceErrorMetres;
 		this.radialVelocityMetresPerSecond = radialVelocityMetresPerSecond;
+		this.radialVelocityPenaltyMetres = radialVelocityPenaltyMetres;
 		this.effectiveOrbitErrorMetres = effectiveOrbitErrorMetres;
 		this.points = points;
 	}
@@ -79,13 +84,15 @@ export class OrbitScoreEvaluator {
 		const radialVelocityMetresPerSecond: number = radiusMetres === 0
 			? 0
 			: (relativeVelocityX * relativeX + relativeVelocityY * relativeY) / radiusMetres;
-		const effectiveOrbitErrorMetres: number = radialDistanceErrorMetres
-			+ Math.abs(radialVelocityMetresPerSecond) * this.velocityReferenceSeconds;
+		const radialVelocityPenaltyMetres: number = Math.abs(radialVelocityMetresPerSecond)
+			* this.velocityReferenceSeconds;
+		const effectiveOrbitErrorMetres: number = radialDistanceErrorMetres + radialVelocityPenaltyMetres;
 
 		return new OrbitEvaluation(
 			radiusMetres,
 			radialDistanceErrorMetres,
 			radialVelocityMetresPerSecond,
+			radialVelocityPenaltyMetres,
 			effectiveOrbitErrorMetres,
 			this.calculatePoints(effectiveOrbitErrorMetres)
 		);

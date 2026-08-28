@@ -1,6 +1,6 @@
 # PlanetCurling
 
-PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Phase G6.2では、Local 2PとCPU対戦を2エンド制に拡張し、エンドごとの先後交代、盤面リセット、得点集計をPC、スマートフォン横持ち、タブレットで利用できます。
+PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲームを目指すAkashic Engine製のプロトタイプです。Local 2PとCPU対戦の2エンド制に加え、Stone別の得点内訳と、意味を識別しやすい位置得点リングをPC、スマートフォン横持ち、タブレットで利用できます。
 
 ## 現在できること
 
@@ -16,6 +16,8 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 - 投球済み惑星を盤面とPhysicsWorldへ残す多体重力
 - 中心天体を追従する半径2 AUのターゲット軌道と位置得点帯
 - 相対位置と相対動径速度を使う0～3点の暫定採点（1人最大9点）
+- **SCORE DETAILS** で確認できるStone別の位置誤差・速度ペナルティ・実効誤差・得点
+- Target、3 PT、2 PT、1 PTを色・dot size・間隔・文字で区別する位置ガイドリング
 - エンド終了時の得点固定、エンド間の完全な盤面リセット、2エンド合計による勝敗
 - 本番と同じ多体重力・積分器・6時間dtによる10年先の軌道予測
 - 投球時の予測を残し、後続天体の重力によるズレを比較できる実軌跡
@@ -41,11 +43,14 @@ PlanetCurlingは、惑星同士の万有引力を使ったカーリング風ゲ�
 4. ドラッグ中は10年先の予測が点線で表示されます。点線リングを位置の目安に離すと投球が確定します。
 5. 投球後は物理世界が10ゲーム年進み、実際に通った経路が実線で延びます。
 6. Vs CPUのBlue turnでは候補を1frameに1件ずつ探索し、最善手の予測線を約0.5秒見せてから自動投球します。
-7. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。
-8. End 1でRedとBlueが3投ずつ終えると得点を固定します。**NEXT END** で盤面を初期化し、Blue先手のEnd 2を開始します。
-9. End 2も3投ずつ終えると、End 1とEnd 2の合計得点で勝敗を表示します。
-10. **RULES** はプレイ中やCPU THINKING中にも開けます。**CLOSE** 後は同じ状態から再開します。
-11. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
+7. リリース済み惑星は、中心天体との距離と相対動径速度から暫定採点されます。リングは位置成分だけのガイドです。
+8. **SCORE DETAILS** を開くと、現在EndのR1～R3 / B1～B3について、位置誤差、速度の距離換算ペナルティ、実効誤差、得点を確認できます。
+9. End 1でRedとBlueが3投ずつ終えると得点を固定します。**NEXT END** で盤面を初期化し、Blue先手のEnd 2を開始します。
+10. End 2も3投ずつ終えると、End 1とEnd 2の合計得点で勝敗を表示します。
+11. **RULES** はプレイ中やCPU THINKING中にも開けます。**CLOSE** 後は同じ状態から再開します。
+12. **Rematch** は同じMode / Difficultyを維持し、**Change Mode** で選択overlayへ戻れます。
+
+最終軌道得点は、`位置誤差 + 動径速度ペナルティ`で求めた実効軌道誤差から決まります。速度ペナルティは、太陽へ近づく／離れる相対動径速度を1ゲーム年分の距離へ換算した値です。そのためStoneが3 PT位置リング内に見えても、動径速度が大きければ2点以下になる場合があります。
 
 照準中は物理時間が停止するため、過去の惑星は動きません。投球済み惑星は中央天体や後続の投球惑星と同じNewton重力の重力源になり、互いに衝突すると反発します。中央天体へ接触した投石だけは吸収され、物理世界と重力源から除外されて得点0になります。過去の惑星を再度ドラッグすることはできません。
 
@@ -83,6 +88,9 @@ src/
   cpu_turn_controller.ts  Blue CPUのplanning・preview・release接続
   match_controller.ts     プレイヤー・End成績・駒・状態・ターン進行
   orbit_score.ts          Akashic非依存の軌道評価と得点計算
+  score_details.ts        現在End Stoneの純粋な得点内訳モデル
+  score_details_view.ts   読み取り専用Score Details modal
+  scoring_ring.ts         GameBalance由来の7本の位置リング定義
   rendering.ts            物理モデルからSpriteへの同期
   responsive_layout.ts    盤面・HUD・touch targetの純粋レイアウト
   game_hud_view.ts        右サイドHUD・結果・orientation案内
@@ -249,3 +257,11 @@ Rules表示中はApplication層の共通gateが`Universe.update()`と`CpuTurnCon
 End 1終了時は`EndTransition`で中間結果を表示します。**NEXT END** を押すとStone、予測軌道、実軌跡、吸収状態、衝突参照、中央天体、`PhysicsWorld`を破棄し、新しい盤面を生成します。End 1の`EndResult`だけは保持されます。Vs CPUではBlueがEnd 2の先手として自動探索を開始し、Local 2PではBlueを人間が操作します。
 
 HUDは終了済みエンドの`MATCH TOTAL`と現在盤面の`CURRENT END`を分けて表示します。End 2終了時はEnd 1、End 2、合計の表を表示し、合計得点から勝敗を決定します。引き分け時の延長戦はありません。
+
+## Issue #2 Score Details / scoring rings
+
+`OrbitEvaluation`は得点に加えて、中心天体からの半径、位置誤差、符号付き動径速度、動径速度を距離換算したペナルティ、実効軌道誤差をすべてSI単位で返します。表示時だけAUへ変換し、View側では得点式を再実装しません。
+
+HUDの **SCORE DETAILS** は現在EndのStoneだけをR1～R3、B1～B3の順で表示します。未投球は`-`、吸収済みは`ABS`・0点です。表示中はRulesと同じ共通gateでPhysics、Turn、CPU planning、Prediction、Trajectory、入力を停止し、閉じると同じ状態から再開します。
+
+盤面の7本の円は`GameBalance`のTargetと3点・2点・1点しきい値から生成します。Target、3 PT、2 PT、1 PTはdotの大きさと間隔、Stoneと混同しにくい色、文字ラベルで区別します。リングは位置誤差だけのガイドであり、最終得点を保証する塗りつぶし領域ではありません。

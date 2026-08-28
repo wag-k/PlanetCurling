@@ -20,8 +20,24 @@ describe("軌道得点評価", (): void => {
 		expect(evaluation.radiusMetres).toBe(100);
 		expect(evaluation.radialDistanceErrorMetres).toBe(0);
 		expect(evaluation.radialVelocityMetresPerSecond).toBe(2);
+		expect(evaluation.radialVelocityPenaltyMetres).toBe(20);
 		expect(evaluation.effectiveOrbitErrorMetres).toBe(20);
 		expect(evaluation.points).toBe(3);
+	});
+
+	it("実効軌道誤差は位置誤差と動径速度の距離換算ペナルティの和になる", (): void => {
+		const evaluator: OrbitScoreEvaluator = new OrbitScoreEvaluator(100, 10, 20, 50, 100);
+		const centralBody: Planet = createPlanet(0, 0, 1, 0);
+		const stone: Planet = createPlanet(130, 0, 4, 0);
+
+		const evaluation: OrbitEvaluation = evaluator.evaluate(stone, centralBody);
+
+		expect(evaluation.radialDistanceErrorMetres).toBe(30);
+		expect(evaluation.radialVelocityMetresPerSecond).toBe(3);
+		expect(evaluation.radialVelocityPenaltyMetres).toBe(30);
+		expect(evaluation.effectiveOrbitErrorMetres).toBe(
+			evaluation.radialDistanceErrorMetres + evaluation.radialVelocityPenaltyMetres
+		);
 	});
 
 	it("位置と速度へ共通の並進を加えても評価が変わらない", (): void => {
@@ -55,6 +71,7 @@ describe("軌道得点評価", (): void => {
 		const evaluation: OrbitEvaluation = evaluator.evaluate(stone, centralBody);
 
 		expect(evaluation.radialVelocityMetresPerSecond).toBe(0);
+		expect(evaluation.radialVelocityPenaltyMetres).toBe(0);
 		expect(evaluation.effectiveOrbitErrorMetres).toBe(0);
 		expect(evaluation.points).toBe(3);
 	});
